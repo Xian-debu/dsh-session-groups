@@ -132,3 +132,30 @@ systemctl restart dsh-web
 - 拖入/拖出：复用 `sessionDragOrder` / `commitSessionDrag` 的 drag 状态但新增「跨容器 = assign/unassign」提交；分组头做 drop 热区。
 - 分组管理菜单：新建（含分组头入口）、改名、删除（二次确认）、拖拽调序；对应 docs/06 Q9/Q11。
 
+## M5（2026-10-21）· P3a 分组头管理落地
+
+### 交付物
+- `patches/0002-p3a-group-header.patch`（321 行），构建产物 `lib/client.js` 252,074 B / sha256 `739ea8163924362e7e890b4b1950a55c407410d53d30157d3dfb7075ef887cd5`，`node scripts/verify.mjs` PASS (10)。
+- 代码块全部落在 `lib/client.js` 内：
+  - store 新增 `moveGroup(id, delta)`（改 `groupOrder`，越界 no-op）；
+  - `CustomGroupHeader({section, t})`：折叠（点击行）、双击/菜单改名（`input.renameInput`，Enter 提交 / Esc 取消 / 失焦提交）、菜单 rename·move-up·move-down·delete(danger)、删除行内二次确认（Delete / Cancel 文本按钮）；
+  - 未分组头无菜单但可折叠，折叠态统一走 `groupsState.collapsed[""]`；
+  - 侧栏头部 `wide && groupBy === "custom"` 插入 `New group` 图标按钮（`IconProjectAddOutlineRegular`）；
+  - locale zh/en 各 9 键：`custom.renameGroup` / `deleteGroup` / `moveUp` / `moveDown` / `deleteConfirm` / `confirmDelete` / `cancel` / `groupActions` / `untitled`。
+
+### 验收（探针 3099 + CDP，未碰生产 3080）
+改名（localStorage `groups[0].name = "Renamed"`）、Move up（`groupOrder` `["g1","g2"]` → `["g2","g1"]`，`data-row-key` 顺序同步）、Delete group（行内确认条 → 只剩 `g1`）、未分组折叠（`collapsed[""] = true`，会话行 91 → 0）全部通过；reload 后清空日志缓冲再断言，**0 console error / 0 page exception**。
+
+### 期间修掉的两个真实缺陷
+1. locale 漏加 9 个 key ⇒ 空名分组直接显示原始 key `custom.untitled`（首次探针发现）。
+2. store 漏加 `moveGroup` ⇒ 点 Move up 抛 `TypeError: sessionGroupsHandle.actions.moveGroup is not a function`，并连带 React #311。
+
+### 探针踩坑（复用结论）
+- 同一 token URL 二次 `Page.navigate` 不再渲染（token 一次性）⇒ 改为「清 localStorage + `Page.reload`」，靠 httpOnly cookie 保活。
+- `Runtime.enable` 会重放上一页缓存的 console 消息 ⇒ 断言前必须清空 logs，否则旧异常会污染验收。
+- 用 `pkill -f "remote-debugging-port=9223"` 重启 chrome 会连自己的 bash 一起杀（命令行含同样字符串）⇒ 把重启逻辑写进 `/tmp/restart-chrome.sh` 再执行。
+- CDP 每个 `send` 都加 12s 超时 + 全局 watchdog，避免脚本 hang 拖死整次 bash 调用。
+
+### 下一步（P3b）
+- 跨容器拖放：会话行拖到别的分组头 / 未分组头 = `assign(sessionId, groupId)` / `unassign`，分组头做 drop 热区并复用 `Rows_module_css_default.dropBefore/dropAfter` 高亮；组内仍走既有 `sessionDragOrder`。
+

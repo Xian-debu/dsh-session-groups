@@ -5,7 +5,8 @@
 | **P0** ✅ | 探测构建逻辑、扩展点、可行性 | docs/01-05、10 | 文档可自洽解释「为什么只能 fork」 | `01-scaffold` |
 | **P1** ✅ | vendor 管线 + fork 骨架跑起来（**零功能变化**） | `scripts/vendor.mjs` / `build.mjs` / `verify.mjs`、`vendor/upstream.json`、`lib/client.js`（仅改 id）、`lib/index.js`、`package.json`、`cordis.patch.yml` | 已上线 3080 实测（见下方「P1 验收记录」）：原生渲染一致、三选项菜单仍在、0 console error、`ui-workspace` 已下线 | `03-p1-fork-skeleton` / `04-p1-install-verify` |
 | **P2** ✅ | 数据模型 + 第四种模式 + 只读渲染 | `patches/0001-custom-groups.patch`（locale + 菜单项 + 渲染分支 + store/derive/列表组件，全部落在 `lib/client.js`）、`lib/client.js` 243,751 B | 探针 3099 CDP 验收（见下方「P2 验收记录」）：菜单出现第四项、切模式后 Ungrouped 平铺、点 New group 生成 Group 1 分区、localStorage 落盘、刷新保留、0 console error | `07-p2-custom-groups` |
-| **P3** | 拖入 / 拖出 / 分组管理 | 自定义拖拽提交、分组头菜单、新建/重命名/删除/调序 | 验收标准 6.2 的交互全通 | `04-drag-and-menus` |
+| **P3a** ✅ | 分组头管理（新建入口、改名、调序、删除二次确认） | `patches/0002-p3a-group-header.patch`、`CustomGroupHeader`、store `moveGroup`、locale zh/en 各 9 键、`lib/client.js` 252,074 B | 探针 3099 CDP 验收（见下方「P3a 验收记录」）：改名、Move up、删除确认、未分组折叠全通，0 console error | `08-p3a-group-header` |
+| **P3b** | 拖入 / 拖出 | 跨容器拖拽提交（assign/unassign）、分组头 drop 热区 | 验收标准 6.2 的拖拽交互全通 | `09-p3b-drag` |
 | **P4** | 与既有机制协同打磨 | 搜索/归档/排序/置顶/水印/locale/键盘 | 无 console error；视觉与原生分组头一致 | `05-polish` |
 | **P5** | e2e + 发布 + 回滚手册 | CDP e2e 脚本、发布步骤、快照回滚演练 | 一次完整安装→使用→回滚演练通过 | `06-release` |
 
@@ -33,6 +34,14 @@
 - 探针实例（`DSH_PROFILE=web dsh web --port 3099 --no-open`）：chunk `/plugins/??dsh-session-groups/client.js&rev=398cd4badd48` → 200 / 243,791 B，含 `CustomGroupsList` ×2、`groupBy.custom` ×3。
 - CDP（1440×900，界面语言 **en**）：View options → Group by 出现 **Custom groups**；点选后侧栏 = `Ungrouped` 单节 + 全部会话平铺 + 尾部 `New group`；点 New group ⇒ `Group 1`（在上）+ `Ungrouped`（在下），`data-row-key` = `["workspace:g1","workspace:__ungrouped__"]`，localStorage `dsh.sessionGroups.v1` = `{"version":1,"groups":[{"id":"g1","name":"Group 1",…}],"assignments":{},"groupOrder":["g1"],"ungroupedOrder":[],"collapsed":{},"updatedAt":…}`；EVENTS 空（0 error / 0 exception）。
 - 已知欠账（P3/P4 处理）：分组头目前复用 `ProjectRowItem`（复用其「未分组」文案与折叠箭头），尚无拖入热区、改名、删除、调序；`New group` 按钮在长列表末尾，需要 P3 在分组头/菜单里补入口（对应 docs/06 Q9）；拖拽（拖入/拖出）整体未接。
+
+## P3a 验收记录（2026-10-21）
+
+- 交付：`patches/0002-p3a-group-header.patch`（321 patches/0002-p3a-group-header.patch 行），新增 `CustomGroupHeader`（折叠 / 双击或菜单改名 / 菜单：rename·move-up·move-down·delete / 行内二次确认条），store 增加 `moveGroup(id, delta)`，locale zh/en 各补 9 键（`custom.renameGroup` / `deleteGroup` / `moveUp` / `moveDown` / `deleteConfirm` / `confirmDelete` / `cancel` / `groupActions` / `untitled`），侧栏头部 `groupBy === "custom"` 时插入 `New group` 图标按钮，未分组节折叠状态改由 `groupsState.collapsed[""]` 驱动。
+- 管线：`node scripts/build.mjs` → `lib/client.js` 252,074 B / sha256 `739ea8163924362e7e890b4b1950a55c407410d53d30157d3dfb7075ef887cd5`，patches = 0001,0002；`node scripts/verify.mjs` → **PASS (10 checks)**。
+- 探针（3099 + CDP 1440×900，界面语言 en）：清 localStorage 后 reload → View options 切 **Custom groups** → 头部 `New group` 建 `g1`、底部按钮建 `g2` → 菜单 rename 为 `Renamed`（localStorage `groups[0].name = "Renamed"`）→ g2 **Move up**（`groupOrder` = `["g2","g1"]`，`data-row-key` 顺序同步）→ g2 **Delete group** 出现行内确认条 `Delete group “Group 2”? Delete / Cancel`，点 Delete 后 `groups` 只剩 `g1` → 点未分组头折叠，`collapsed[""] = true`、会话行 91 → 0。**0 console error / 0 page exception**（reload 后清空日志缓冲再断言）。
+- 期间修掉两个真实缺陷：① locale 漏加 9 个 key ⇒ 空名分组把原始 key `custom.untitled` 显示出来；② store 漏加 `moveGroup` ⇒ 点 Move up 抛 `TypeError: sessionGroupsHandle.actions.moveGroup is not a function` 并连带 React #311。
+- 探针坑：同一个 token URL 二次 `Page.navigate` 不再渲染（token 一次性）⇒ 改为「清 localStorage + `Page.reload`」（httpOnly cookie 保活）；`Runtime.enable` 会重放上一页缓存的 console 消息 ⇒ 必须在 reload 完成后清空 logs 再断言。
 
 ## 后续阶段的固定待办
 

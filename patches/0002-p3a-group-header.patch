@@ -1,0 +1,321 @@
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -3449,6 +3449,19 @@
+ 							} : group)
+ 						});
+ 					},
++					moveGroup: (id, delta) => {
++						const order = [...state.groupOrder];
++						const index = order.indexOf(id);
++						if (index < 0) return;
++						const next = index + delta;
++						if (next < 0 || next >= order.length) return;
++						order.splice(index, 1);
++						order.splice(next, 0, id);
++						commit({
++							...state,
++							groupOrder: order
++						});
++					},
+ 					removeGroup: (id) => {
+ 						const assignments = Object.fromEntries(Object.entries(state.assignments).filter(([, groupId]) => groupId !== id));
+ 						commit({
+@@ -3529,6 +3542,187 @@
+ 				stray: buckets.get("")
+ 			};
+ 		}
++		/**
++		* One custom-group header: collapse, inline rename, move up/down, delete with an inline confirm.
++		* A real folder (workspaceId) header would offer workspace actions, so custom groups render
++		* their own row instead of reusing ProjectRowItem.
++		* @param props.section - derived section (groupId undefined = the ungrouped bucket).
++		* @param props.t - the browser root's locale seat.
++		* @returns the header row.
++		*/
++		function CustomGroupHeader({ section, t }) {
++			const ungrouped = section.groupId === void 0;
++			const rowKey = "workspace:" + (section.key === "" ? "__ungrouped__" : section.key);
++			const [menuOpen, setMenuOpen] = react.useState(false);
++			const [editing, setEditing] = react.useState(false);
++			const [confirming, setConfirming] = react.useState(false);
++			const [draft, setDraft] = react.useState(section.label);
++			const label = section.label === "" ? t("custom.untitled") : section.label;
++			const startRename = () => {
++				setDraft(section.label);
++				setEditing(true);
++			};
++			const commitRename = () => {
++				setEditing(false);
++				const next = draft.trim();
++				if (!ungrouped && next !== "" && next !== section.label) sessionGroupsHandle.actions.renameGroup(section.groupId, next);
++			};
++			const cancelRename = () => {
++				setDraft(section.label);
++				setEditing(false);
++			};
++			const cancelConfirm = () => {
++				setConfirming(false);
++			};
++			if (confirming) return (0, react_jsx_runtime.jsxs)("div", {
++				className: Rows_module_css_default.projectRow,
++				"data-row-key": rowKey,
++				role: "treeitem",
++				"aria-expanded": section.expanded,
++				children: [(0, react_jsx_runtime.jsx)("span", {
++					className: clsx(Rows_module_css_default.slot, Rows_module_css_default.folder),
++					children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconFolderCloseRegular, {})
++				}), (0, react_jsx_runtime.jsx)("span", {
++					className: Rows_module_css_default.projectText,
++					children: (0, react_jsx_runtime.jsx)("span", {
++						className: Rows_module_css_default.title,
++						children: t("custom.deleteConfirm", { name: label })
++					})
++				}), (0, react_jsx_runtime.jsxs)("span", {
++					className: Rows_module_css_default.rowActions,
++					style: { display: "inline-flex", gap: "8px" },
++					children: [(0, react_jsx_runtime.jsx)("button", {
++						type: "button",
++						style: {
++							background: "none",
++							border: "none",
++							cursor: "pointer",
++							color: "var(--dsw-alias-state-error-primary)",
++							fontSize: "12px",
++							padding: "0 2px"
++						},
++						"aria-label": t("custom.confirmDelete"),
++						onClick: (e) => {
++							e.stopPropagation();
++							setConfirming(false);
++							sessionGroupsHandle.actions.removeGroup(section.groupId);
++						},
++						children: t("custom.confirmDelete")
++					}), (0, react_jsx_runtime.jsx)("button", {
++						type: "button",
++						style: {
++							background: "none",
++							border: "none",
++							cursor: "pointer",
++							color: "var(--dsw-alias-label-secondary)",
++							fontSize: "12px",
++							padding: "0 2px"
++						},
++						"aria-label": t("custom.cancel"),
++						onClick: cancelConfirm,
++						children: t("custom.cancel")
++					})]
++				})]
++			});
++			const menuItems = [{
++				id: "rename",
++				label: t("custom.renameGroup"),
++				icon: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconEditOutlineRegular, {})
++			}, {
++				id: "move-up",
++				label: t("custom.moveUp")
++			}, {
++				id: "move-down",
++				label: t("custom.moveDown")
++			}, {
++				id: "delete",
++				label: t("custom.deleteGroup"),
++				icon: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconTrashOutlineRegular, {}),
++				danger: true
++			}];
++			const actions = [];
++			if (!ungrouped) actions.push((0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Menu, {
++				open: menuOpen,
++				onClose: () => {
++					setMenuOpen(false);
++				},
++				items: menuItems,
++				onSelect: (id) => {
++					setMenuOpen(false);
++					if (id === "rename") startRename();
++					else if (id === "delete") setConfirming(true);
++					else if (id === "move-up") sessionGroupsHandle.actions.moveGroup(section.groupId, -1);
++					else if (id === "move-down") sessionGroupsHandle.actions.moveGroup(section.groupId, 1);
++				},
++				portal: true,
++				closeOnPointerLeave: true,
++				anchor: (0, react_jsx_runtime.jsx)("button", {
++					type: "button",
++					className: Rows_module_css_default.iconButton,
++					"aria-label": t("custom.groupActions", { name: label }),
++					onClick: (e) => {
++						e.stopPropagation();
++						setMenuOpen((v) => !v);
++					},
++					children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconEllipsisOutlineRegular, {})
++				})
++			}, "menu"));
++			return (0, react_jsx_runtime.jsxs)("div", {
++				className: clsx(Rows_module_css_default.projectRow, menuOpen && Rows_module_css_default.menuOpen),
++				"data-row-key": rowKey,
++				role: "treeitem",
++				"aria-expanded": section.expanded,
++				onClick: () => {
++					sessionGroupsHandle.actions.toggleGroup(ungrouped ? "" : section.groupId);
++				},
++				children: [
++					(0, react_jsx_runtime.jsx)("span", {
++						className: clsx(Rows_module_css_default.slot, Rows_module_css_default.folder, section.expanded && Rows_module_css_default.folderActive),
++						children: section.expanded ? (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconFolderOpenRegular, {}) : (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconFolderCloseRegular, {})
++					}),
++					(0, react_jsx_runtime.jsx)("span", {
++						className: clsx(Rows_module_css_default.slot, Rows_module_css_default.chevron),
++						children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconTriangleRightFillRegular, { className: clsx(Rows_module_css_default.arrow, section.expanded && Rows_module_css_default.arrowOpen) })
++					}),
++					(0, react_jsx_runtime.jsx)("span", {
++						className: Rows_module_css_default.projectText,
++						children: editing ? (0, react_jsx_runtime.jsx)("input", {
++							className: Rows_module_css_default.renameInput,
++							value: draft,
++							autoFocus: true,
++							"aria-label": t("custom.renameGroup"),
++							onChange: (e) => {
++								setDraft(e.target.value);
++							},
++							onKeyDown: (e) => {
++								if (e.key === "Enter") {
++									e.preventDefault();
++									commitRename();
++								} else if (e.key === "Escape") {
++									e.preventDefault();
++									cancelRename();
++								}
++							},
++							onBlur: commitRename,
++							onClick: (e) => {
++								e.stopPropagation();
++							}
++						}) : (0, react_jsx_runtime.jsx)("span", {
++							className: Rows_module_css_default.title,
++							onDoubleClick: ungrouped ? void 0 : (e) => {
++								e.stopPropagation();
++								startRename();
++							},
++							children: label
++						})
++					}),
++					actions.length > 0 && (0, react_jsx_runtime.jsx)("span", {
++						className: Rows_module_css_default.rowActions,
++						children: actions
++					})
++				]
++			});
++		}
+ 		/** The custom-groups body: assignments decide the single home of every visible Session. */
+ 		function CustomGroupsList({ list, rowState, onLeaveArchivedOnly, useSessionStatus, open, onSessionRenameRequest, renderSlot, revealSessionId, onSessionRevealed, usePanelInfo, workspaceReady, animationResetKey, t }) {
+ 			const panelActive = usePanelInfo((info) => info.activePanelId !== null);
+@@ -3538,14 +3732,17 @@
+ 				const derived = deriveCustomSections(list, rowState, statuses, groupsState);
+ 				const archived = new Set(rowState.archivedSessionIds);
+ 				const pinned = new Set(rowState.pinnedSessionIds);
+-				if (derived.stray.length > 0 || derived.sections.length === 0) derived.sections.push({
+-					key: "",
+-					label: "",
+-					groupId: void 0,
+-					expanded: true,
+-					sessionCount: derived.stray.length,
+-					sessions: sectionMembers(derived.stray, pinned, archived).map((session) => sessionNode(session, list, statuses, pinned, archived))
+-				});
++				if (derived.stray.length > 0 || derived.sections.length === 0) {
++					const ungroupedExpanded = groupsState.collapsed[""] !== true;
++					derived.sections.push({
++						key: "",
++						label: "",
++						groupId: void 0,
++						expanded: ungroupedExpanded,
++						sessionCount: derived.stray.length,
++						sessions: ungroupedExpanded ? sectionMembers(derived.stray, pinned, archived).map((session) => sessionNode(session, list, statuses, pinned, archived)) : []
++					});
++				}
+ 				return derived.sections;
+ 			}, [
+ 				list,
+@@ -3587,26 +3784,9 @@
+ 				children.push((0, react_jsx_runtime.jsxs)("div", {
+ 					className: WorkspaceBrowser_module_css_default.groupSection,
+ 					style: { "--dsh-workspace-indent": "0px" },
+-					children: [(0, react_jsx_runtime.jsx)(ProjectRowItem, {
+-						group: {
+-							key: section.key === "" ? "__ungrouped__" : section.key,
+-							workspaceId: section.groupId,
+-							cwd: void 0,
+-							createdAt: void 0,
+-							label: section.label,
+-							sessions: [],
+-							expanded: section.expanded,
+-							sessionCount: section.sessionCount,
+-							containsCurrent: false
+-						},
+-						containsCurrentDescendant: false,
+-						newShortcut: void 0,
+-						home: void 0,
+-						t,
+-						onCreate: () => {},
+-						onToggle: section.groupId === void 0 ? void 0 : () => {
+-							sessionGroupsHandle.actions.toggleGroup(section.groupId);
+-						}
++					children: [(0, react_jsx_runtime.jsx)(CustomGroupHeader, {
++						section,
++						t
+ 					}, rowKey + ":header"), rows.length > 0 && (0, react_jsx_runtime.jsx)("div", {
+ 						role: "group",
+ 						children: rows
+@@ -4180,7 +4360,21 @@
+ 							}),
+ 							(0, react_jsx_runtime.jsxs)("div", {
+ 								className: clsx(WorkspaceBrowser_module_css_default.headerActions, wide && searchExpanded && WorkspaceBrowser_module_css_default.headerActionsHidden),
+-								children: [wide && (0, react_jsx_runtime.jsx)(ViewOptionsMenu, {
++								children: [wide && groupBy === "custom" && (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
++								label: t("custom.newGroup"),
++								side: "bottom",
++								delayMs: 500,
++								children: (0, react_jsx_runtime.jsx)("button", {
++									type: "button",
++									className: WorkspaceBrowser_module_css_default.iconButton,
++									"aria-label": t("custom.newGroup"),
++									onClick: () => {
++										const next = sessionGroupsHandle.getSnapshot().groups.length + 1;
++										sessionGroupsHandle.actions.createGroup(t("custom.defaultName", { n: next }));
++									},
++									children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconProjectAddOutlineRegular, { size: 16 })
++								})
++							}), wide && (0, react_jsx_runtime.jsx)(ViewOptionsMenu, {
+ 									groupBy,
+ 									orderBy,
+ 									archivedFilter,
+@@ -5068,6 +5262,15 @@
+ 			"groupBy.custom": "自定义分组",
+ 			"custom.newGroup": "新建分组",
+ 			"custom.defaultName": "分组 {n}",
++			"custom.renameGroup": "重命名分组",
++			"custom.deleteGroup": "删除分组",
++			"custom.moveUp": "上移",
++			"custom.moveDown": "下移",
++			"custom.deleteConfirm": "删除分组“{name}”？",
++			"custom.confirmDelete": "删除",
++			"custom.cancel": "取消",
++			"custom.groupActions": "分组操作：{name}",
++			"custom.untitled": "未命名分组",
+ 			"orderBy.label": "排序方式",
+ 			"orderBy.manual": "手动排序",
+ 			"orderBy.updated": "最近更新",
+@@ -5193,6 +5396,15 @@
+ 			"groupBy.custom": "Custom groups",
+ 			"custom.newGroup": "New group",
+ 			"custom.defaultName": "Group {n}",
++			"custom.renameGroup": "Rename group",
++			"custom.deleteGroup": "Delete group",
++			"custom.moveUp": "Move up",
++			"custom.moveDown": "Move down",
++			"custom.deleteConfirm": "Delete group “{name}”?",
++			"custom.confirmDelete": "Delete",
++			"custom.cancel": "Cancel",
++			"custom.groupActions": "Group actions for {name}",
++			"custom.untitled": "Untitled group",
+ 			"orderBy.label": "Order by",
+ 			"orderBy.manual": "Manual",
+ 			"orderBy.updated": "Last updated",
