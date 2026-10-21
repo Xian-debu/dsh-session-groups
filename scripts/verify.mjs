@@ -27,10 +27,28 @@ function check(id, ok, detail) {
 const metaPath = join(ROOT, "vendor", "upstream.json");
 const meta = existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, "utf8")) : null;
 check("V1a vendor/upstream.json 存在", !!meta);
+
+/** 本机是否装有 DSH 上游包（离线 / CI 上通常没有）。 */
+function tryUpstream() {
+  try {
+    return readUpstream();
+  } catch {
+    return null;
+  }
+}
+
 if (meta) {
-  const up = readUpstream();
-  check("V1b 上游版本一致", meta.version === up.pkg.version, meta.version + " vs " + up.pkg.version);
-  check("V1c 上游 sha256 一致", meta.sha256 === sha256(up.body), "若上游已升级：npm run vendor && npm run build 后重验");
+  // V1d 离线即可校验：vendored 快照与登记 sha256 一致（CI 也跑这一条）。
+  const pristinePath = join(ROOT, "vendor", "client.pristine.js");
+  const pristineOk = existsSync(pristinePath) && sha256(readFileSync(pristinePath)) === meta.sha256;
+  check("V1d 快照 sha256 = upstream.json", pristineOk, meta.version + " sha256=" + (meta.sha256 || "?").slice(0, 12) + "…");
+  const up = tryUpstream();
+  if (up) {
+    check("V1b 上游版本一致", meta.version === up.pkg.version, meta.version + " vs " + up.pkg.version);
+    check("V1c 上游 sha256 一致", meta.sha256 === sha256(up.body), "若上游已升级：npm run vendor && npm run build 后重验");
+  } else {
+    console.log("  skip  V1b/V1c 未找到本机 DSH 安装（离线模式；保持 V1d 快照自校验）");
+  }
 }
 
 const committed = join(ROOT, "lib", "client.js");
@@ -55,10 +73,18 @@ if (existsSync(committed)) {
 }
 
 const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
-const up = readUpstream();
-const mine = ((pkg.dsh || {}).client || {}).inject || [];
-const theirs = ((up.pkg.dsh || {}).client || {}).inject || [];
-check("V4 dsh.client.inject 与上游一致", JSON.stringify([...mine].sort()) === JSON.stringify([...theirs].sort()), mine.length + " vs " + theirs.length);
+{
+  const up = tryUpstream();
+  const mine = ((pkg.dsh || {}).client || {}).inject || [];
+  if (up) {
+    const theirs = ((up.pkg.dsh || {}).client || {}).inject || [];
+    check("V4 dsh.client.inject 与上游一致", JSON.stringify([...mine].sort()) === JSON.stringify([...theirs].sort()), mine.length + " vs " + theirs.length);
+  } else {
+    const registered = Array.isArray(meta && meta.inject) ? meta.inject : [];
+    const same = JSON.stringify([...mine].sort()) === JSON.stringify([...registered].sort());
+    check("V4 dsh.client.inject 与 vendor/upstream.json 记录一致", same, mine.length + " vs " + registered.length + "（离线模式）");
+  }
+}
 
 const failed = results.filter((r) => !r.ok);
 console.log(failed.length === 0 ? "[verify] PASS (" + results.length + " checks)" : "[verify] FAIL " + failed.length + "/" + results.length);

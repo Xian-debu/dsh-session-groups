@@ -1,76 +1,262 @@
-# dsh-session-groups —— DSH 会话「自定义分组」
+# dsh-session-groups · DSH 会话自定义分组
 
-> 给 DeepSeek Harness（DSH）Web 会话侧栏增加第四种分组方式：**自定义分组**。
-> 用户自建分组、把会话拖进去、拖出来；本质是**显示层**的唯一性归组，不改动会话在本地的真实排列。
+[![CI](https://github.com/Xian-debu/dsh-session-groups/actions/workflows/ci.yml/badge.svg)](https://github.com/Xian-debu/dsh-session-groups/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)](package.json)
+[![DSH](https://img.shields.io/badge/DSH-0.2.1--rc.2-blueviolet.svg)](https://github.com/deepseek-ai)
 
-## 当前状态
+给 [DeepSeek Harness](https://github.com/deepseek-ai)（下称 DSH）Web 会话侧栏加**第四种分组方式：自定义分组**。
+自建分组、把会话拖进拖出、用键盘管理、按组折叠分页——全部是**显示层**的归类，不改动会话在磁盘上的真实顺序，也不上传任何数据。
 
-| 阶段 | 内容 | 状态 |
+> 非官方插件。本仓库 fork 自 DSH 自带包 `@deepseek-ai/dsh-client-ui-workspace`（MIT），只替换「会话浏览器」这一个 slot，其余部分原样保留。
+
+![侧栏里的自定义分组](docs/images/overview.png)
+
+*（截图使用示意会话名，非真实数据）*
+
+## 功能
+
+- **第四种分组模式**：会话侧栏「视图选项」菜单里多出 *Custom groups*，与官方的「按工作区 / 按时间 / 不分组」并列，随时可切回。
+- **自建分组**：新建、改名（F2 / 双击 / 菜单）、上移下移、删除（二次确认）。
+- **拖放归组**：把会话拖进分组头或组内即归组，拖回「未分组」区即解除；组内可拖拽排序。
+- **行内「⋯」菜单**：*Move to group…* 弹窗选组，*Remove from custom group* 一键移出；菜单项按当前归组状态自动显隐。
+- **置顶独立区**：置顶会话自动进入 *Pinned* 区，优先级高于归组，不重复出现、不可拖入分组。
+- **折叠 / 分页**：分组头可折叠；成员多时按组水印分页（*Show N more sessions* / *Show less*）。
+- **键盘可达**：分组头可 Tab 聚焦，Enter/空格折叠，F2 改名，Shift+F10 打开菜单，方向键/Home/End 在菜单内导航，Esc 取消。
+- **与官方能力协同**：搜索、归档筛选、置顶、手动排序、locale（zh/en）、aria 全部保留。
+
+![分组操作菜单](docs/images/group-menu.png)
+
+![移动到分组弹窗](docs/images/move-dialog.png)
+
+## 与其它开源项目的关系
+
+| 项目 | 关系 |
+| --- | --- |
+| `@deepseek-ai/dsh-client-ui-workspace` | **上游**。本仓库 vendor 其 `lib/client.js`（232,668 B / 5,354 行），以 7 个 patch 叠加功能后构建产物。MIT 许可，保留原署名。 |
+| DeepSeek Harness | **宿主**。只通过 profile 的 `dsh.profile.bundles` 注入本包，不修改 DSH 安装目录里的任何文件。 |
+| 本机其它 DSH 插件（dsh-ops / dsh-skill-hub / dsh-proxy-hub 等） | **互不依赖**。它们各自是独立包；本插件占用 `sidebar.workspaces` 这个 single slot，与它们注册的 slot 不冲突。 |
+
+## 环境要求
+
+| 项 | 要求 | 说明 |
 | --- | --- | --- |
-| P0 | 探测 DSH 会话页构建逻辑 / 扩展点 / 可行性 | ✅ 完成（2026-10-21） |
-| P1 | vendor 管线 + fork 骨架安装冒烟 | ✅ 完成（2026-10-21，零功能变化已上线） |
-| P2 | 自定义分组数据模型 + 第四种分组模式 + 渲染 | ✅ 完成（2026-10-21，探针 3099 验收：菜单第四项、分区渲染、新建分组、刷新保留、0 报错） |
-| P3a | 分组头管理（新建入口 / 改名 / 上移下移 / 删除二次确认 / locale 补键） | ✅ 完成（2026-10-21，探针 3099 验收：改名、调序、删除确认、未分组折叠全通，0 报错） |
-| P3b | 拖入 / 拖出（跨容器 assign/unassign + 分组头 drop 热区） | ✅ 完成（2026-10-21，探针 3099 验收：拖入分组、拖回未分组、刷新保留、drop 高亮全通，0 报错） |
-| P4a | 置顶会话独立「置顶」区（不参与归组、可折叠、不可拖、pin 唯一性优先） | ✅ 完成（2026-10-21，探针 3099 验收：置顶/折叠/取消置顶/与分组互斥/归档筛选全通，0 报错） |
-| P4b | 会话行「⋯」菜单归组（移动到分组… / 移出自定义分组，Modal 选组） | ✅ 完成（2026-10-21，探针 3099 验收：菜单项按归组状态条件出现、Modal 三选项、assign 落盘、行唯一移动、取消归组、刷新保留，0 报错） |
-| P4c | 分组头 / 菜单键盘可达 + aria/locale 补全（Tab 聚焦、Enter/空格折叠、F2 改名、Shift+F10 菜单、方向键/Home/End 导航、Esc 取消） | ✅ 完成（2026-10-21，探针 3099 验收 32 项全绿：焦点环、折叠/展开落盘、F2 改名与 Esc 取消、键盘开菜单并聚焦首项、方向键移动、Enter 激活、删除确认 Esc 取消与 Delete 自动聚焦，0 报错） |
-| P4d | 每组水印分页（Show N more / Show less）+ 折叠头拖拽经过自动展开 + 组内排序取舍 | ✅ 完成（2026-10-21，探针 3099 验收 13 项全绿：7 成员组显示 5 行 + 「Show 2 more sessions」、展开 7 行/收起 5 行、aria-expanded 跟随、2 成员组无分页、折叠头 600ms 自动展开且不移动会话，0 报错） |
-| P4 | 与搜索、归档、手动排序、水印、locale、键盘的协同打磨 | ✅ 完成（P4a–P4d 全部落地） |
-| P5 | e2e 冒烟 + 发布/回滚手册 | ✅ 完成（2026-10-21，`scripts/e2e.mjs` 自起临时 chrome 跑 S1–S9 **17/17 passed**、0 console error；`docs/12-release-rollback.md` 覆盖安装/升级/禁用/卸载/快照还原/数据清理/故障排查。真实卸载演练会中断当前 3080 会话，留待空闲时手做一次，见手册 12.10） |
+| DSH | `0.2.1-rc.2`（已验证） | 上游包结构随版本变动，换版本需重新 vendor + build + verify，见 [docs/13](docs/13-environments.md#133-各环境要点与难度) |
+| Node.js | `>= 22` | 构建脚本与插件运行环境 |
+| 平台 | Linux / macOS / WSL2 | Windows 原生可用但未实测（见 [docs/13](docs/13-environments.md)） |
+| 浏览器 | 任一现代浏览器 | e2e 冒烟需要本机 Chrome/Chromium |
 
-## 三条关键结论（P0）
+## 快速开始
 
-1. **「分组方式」菜单是硬编码的，没有扩展点。** 三个选项写在 `@deepseek-ai/dsh-client-ui-workspace` 的 `ViewOptionsMenu` 里，没有任何 slot / 注册表；`sidebar.workspaces` hole 是 `kind: "single"`，全 App 只允许一个会话浏览器注册者。
-2. **拖拽基础设施已存在但只支持「组内重排」。** `commitSessionDrag` 只按 `activeDrag.accountKey` 重排己方账号组，**跨工作区/跨分组搬移会话没有实现**，需要我们自己加。
-3. **要实现原生第四种模式，只能 fork 该插件包。** 无模块 override / alias 能力（见 `docs/04-extension-points.md`），因此 `docs/05-options.md` 推荐「vendor + 补丁」方案（MIT 许可允许，保留署名）。
+```bash
+# 1) 取仓库
+git clone https://github.com/Xian-debu/dsh-session-groups.git
+cd dsh-session-groups
+
+# 2) 构建产物（pristine + patches → lib/client.js）并自检
+node scripts/build.mjs
+node scripts/verify.mjs
+
+# 3) 装进 profile（默认 --profile web）
+node scripts/install.mjs --dry-run    # 先看它要改什么
+node scripts/install.mjs              # 真正写入（自动备份 package.json）
+
+# 4) 重启 DSH Web 进程（插件集合只在进程启动时装载）
+#    systemd: sudo systemctl restart dsh-web
+#    前台:    Ctrl+C 后重新 dsh web
+```
+
+重启后打开会话侧栏 → 「视图选项」→ **Custom groups**。新建第一个分组即可。
+
+## 安装方式
+
+### 方式 A：link 安装（推荐，开发与自用）
+
+`scripts/install.mjs` 做的事（幂等，可重复执行）：
+
+1. 在 profile 的 `package.json` 里登记 `dependencies["dsh-session-groups"] = "link:<仓库绝对路径>"`；
+2. 往 `dsh.profile.bundles` 追加包名；
+3. 在 `<profile>/node_modules/` 下建相对软链（Windows 用 junction）；
+4. 写文件前备份为 `package.json.bak.<UTC 时间戳>`。
+
+```bash
+node scripts/install.mjs --check        # 只检查，0=正常 / 1=异常
+node scripts/install.mjs --remove       # 卸载（还原依赖与 bundles 登记，删软链）
+node scripts/install.mjs --json         # 机器可读输出
+```
+
+源码目录即生效目录：改完 `lib/client.js` 刷新页面即可，无需复制。
+
+### 方式 B：手动编辑 profile
+
+不想跑脚本时，等价的手工步骤：
+
+```jsonc
+// <DSH_HOME>/profiles/web/package.json
+{
+  "dependencies": { "dsh-session-groups": "link:/absolute/path/to/dsh-session-groups" },
+  "dsh": { "profile": { "bundles": [ /* …原有项…, "dsh-session-groups" */ ] } }
+}
+```
+
+```bash
+ln -sfn /absolute/path/to/dsh-session-groups <DSH_HOME>/profiles/web/node_modules/dsh-session-groups
+```
+
+### 方式 C：`dsh plugin add`（不推荐）
+
+历史上有 `ERR_PNPM_NO_MATCHING_VERSION` 等解析问题（见 [docs/10](docs/10-finding-duplicate-session-id-menu.md)），
+且它不保证 link 语义。除非你的 profile 依赖树干净，否则优先用方式 A。
+
+## 用法
+
+| 操作 | 方式 |
+| --- | --- |
+| 切到自定义分组 | 侧栏「视图选项」→ *Custom groups* |
+| 新建分组 | 列表底部 *New group*，或分组菜单里的新建项 |
+| 会话归组 | 拖到分组头/组内；或行内「⋯」→ *Move to group…* → 选组 |
+| 解除归组 | 拖回 *Untitled group*；或「⋯」→ *Remove from custom group* |
+| 改名 | 双击分组头 / F2 / 分组菜单 *Rename group* |
+| 调序 | 分组菜单 *Move up* / *Move down* |
+| 删除 | 分组菜单 *Delete group* → 二次确认（组内会话回到未分组，不会删会话） |
+| 折叠 | 点分组头，或聚焦后 Enter / 空格 |
+| 看更多 | 组内超过水印时点 *Show N more sessions* |
+
+### 键盘
+
+| 键 | 作用 |
+| --- | --- |
+| `Tab` / `Shift+Tab` | 在分组头与行之间移动焦点 |
+| `Enter` / `Space` | 折叠 / 展开当前分组 |
+| `F2` | 重命名当前分组（仅真实分组） |
+| `Shift+F10`（或菜单键） | 打开分组菜单并聚焦第一项 |
+| `↑` / `↓` / `Home` / `End` | 菜单内导航 |
+| `Enter` | 执行菜单项 |
+| `Esc` | 关闭菜单 / 取消改名 / 取消删除确认 |
+
+## 数据与隐私
+
+- 全部状态存在浏览器 `localStorage`，键名 **`dsh.sessionGroups.v1`**，按 **origin** 隔离（换端口/域名＝另一份数据）。
+- 结构：`{ version, groups: [{id,name}], groupOrder, assignments: {sessionId: groupId}, collapsed }`。
+- 不联网、无遥测、不回传任何会话内容；分组只是「会话 id → 组 id」的映射。
+- 导出/备份（浏览器控制台）：
+
+```js
+copy(localStorage.getItem("dsh.sessionGroups.v1"))        // 备份
+localStorage.setItem("dsh.sessionGroups.v1", "<粘贴>")     // 还原后刷新
+```
+
+- 卸载本插件不会删数据；清空 localStorage 或删键即彻底清除。
+
+## 验证
+
+```bash
+node scripts/build.mjs    # pristine + patches → lib/client.js，并校验逐字节一致
+node scripts/verify.mjs   # 11 项检查：上游 sha、patch 覆盖、注入声明、id 唯一、locale 键等
+node scripts/e2e.mjs --url "http://127.0.0.1:3099/?token=<token>"   # 端到端冒烟（自起临时 chrome，S1–S9）
+```
+
+CI（GitHub Actions）跑两件事：`build` 后 `git diff --exit-code -- lib/client.js`（保证产物与 patch 一致），以及 `node --check` 全部 JS。
+本地无 DSH 安装时 `verify` 自动降级为「快照自校验」（V1d），仍能验证 patch 管线的完整性。
+
+## 已知问题
+
+完整清单见 [docs/14-known-issues.md](docs/14-known-issues.md)。最常见的几条：
+
+1. **强绑定上游版本**：升级 DSH 后必须重新 vendor + build；否则 slot/注入可能对不上。
+2. **全局单会话浏览器**：本插件替换的是整个会话侧栏（`sidebar.workspaces` 是 single slot），与别的「会话浏览器类」插件互斥。
+3. **数据在 localStorage**：换端口、换 profile、换浏览器都看不到同一份分组；无跨设备同步。
+4. **插件集合只在进程启动装载**：装了/卸了必须重启 DSH Web 进程，热插拔无效。
+5. **行内「⋯」而非右键菜单**：宿主没有真正的 `contextmenu`，归组入口在行内按钮。
+6. **删除分组不可撤销**：组内会话会回到未分组，但组定义本身没有 undo。
+
+## 部署到其它环境
+
+不同环境的改造量与坑位差异很大，难度与步骤见 [docs/13-environments.md](docs/13-environments.md)：
+
+| 环境 | 难度 | 关键点 |
+| --- | --- | --- |
+| Linux + systemd（作者环境） | ★ | 照 README 走即可 |
+| macOS 本机 | ★★ | 服务由 launchd/前台启动，重启方式不同 |
+| Windows 原生 | ★★★ | 软链退化为 junction；路径/权限需注意（未实测） |
+| 容器 / 只读根文件系统 | ★★★ | 必须把 `DSH_HOME` 挂成卷，否则重启即丢 |
+| 反向代理 / 多用户共享 | ★★★★ | localStorage 按 origin，多用户会共享同一份分组数据 |
+
+## 升级 / 卸载 / 回滚
+
+- **升级本插件**：`git pull` → `node scripts/build.mjs` → `node scripts/verify.mjs` → 重启 DSH。
+- **升级 DSH 后**：`node scripts/vendor.mjs`（重新取上游）→ 逐个 patch 重基 → `build`/`verify`/`e2e`。
+- **临时禁用**：从 profile 的 `bundles` 里注释掉包名 → 重启（软链可留着）。
+- **彻底卸载**：`node scripts/install.mjs --remove` → 重启。
+- **回退到官方侧栏**：`--remove` 后重启即可，数据仍在 localStorage 里（再装回来即恢复）。
+- 详细的分级回滚（单文件快照 / 整包快照 / 数据清理 / 故障排查）见 [docs/12-release-rollback.md](docs/12-release-rollback.md)。
+
+## 仓库结构
+
+```
+lib/            build 产物：client.js（注入前端）、index.js（服务端空壳）
+vendor/         上游快照 client.pristine.js + upstream.json（sha256/版本锚点）
+patches/        0001…0007 增量补丁（pristine 之上依次叠加）
+scripts/        vendor / build / verify / install / e2e
+src/            插件入口源码
+docs/           01–14 设计、验收、发布、环境、已知问题
+docs/images/    README 截图
+```
+
+### 开发流程（改代码必读）
+
+1. 改 `lib/client.js`（手改，产物即源）；
+2. **先生成 patch**：`diff -u --label a/lib/client.js --label b/lib/client.js <上一阶段产物> lib/client.js > patches/000N-xxx.patch`；
+3. 再 `node scripts/build.mjs`（它会用 pristine+patches **覆盖** `lib/client.js`）；
+4. `node scripts/verify.mjs` 必须 PASS，且 build 结果与手改逐字节一致；
+5. 探针实例（独立端口 + headless Chrome）验证 UI，0 console error 才算过；
+6. 更新文档 → 独立提交，提交信息一行中文：`NN-stage: 做了什么`。
+
+> 顺序反了（先 build 再出 patch）会把你的手改抹掉。
+
+## 维护者发布流程（需要 GitHub token）
+
+代码本身不需要任何凭证；只有**推送与发版**需要 GitHub 身份。
+
+```bash
+gh auth status                 # 确认已登录，至少需要 repo 权限（发版加 workflow）
+gh auth login                  # 交互登录（推荐 device flow）
+gh repo create Xian-debu/dsh-session-groups --public --source . --push
+```
+
+- 本机 `gh` 已登录 `Xian-debu`，scopes：`repo`, `read:org`, `workflow`。
+- `GITHUB_TOKEN` 环境变量若存在但已过期，会覆盖 `gh` 的登录态并返回 401——排查时先 `gh auth status`，必要时 `unset GITHUB_TOKEN`。
+- 发版：`git tag v1.0.0 && git push --tags`，再 `gh release create v1.0.0 --generate-notes`。
+- 不发布到 npm（本插件靠 profile link 安装；npm 上同名包非本仓库所有）。
 
 ## 文档索引
 
 | 文档 | 内容 |
 | --- | --- |
-| [docs/01-purpose.md](docs/01-purpose.md) | 目的、用户需求原文、目标与非目标、验收标准 |
-| [docs/02-constraints.md](docs/02-constraints.md) | 技术/环境/工程/安全四类硬约束 |
-| [docs/03-architecture.md](docs/03-architecture.md) | DSH 客户端插件加载链路、workspace 包结构、数据流与行号锚点 |
-| [docs/04-extension-points.md](docs/04-extension-points.md) | slot/hole 清单、可注入内容、拖拽可复用点、patch 层能力 |
+| [docs/01-purpose.md](docs/01-purpose.md) | 目的、需求原文、目标与非目标、验收标准 |
+| [docs/02-constraints.md](docs/02-constraints.md) | 技术/环境/工程/安全硬约束 |
+| [docs/03-architecture.md](docs/03-architecture.md) | 插件加载链路、上游包结构、数据流与行号锚点 |
+| [docs/04-extension-points.md](docs/04-extension-points.md) | slot/hole 清单、可注入内容、拖拽复用点、patch 层能力 |
 | [docs/05-options.md](docs/05-options.md) | 四种实现路线对比与推荐 |
-| [docs/06-design-draft.md](docs/06-design-draft.md) | 自定义分组设计草案 + **待裁决问题清单** |
-| [docs/07-roadmap.md](docs/07-roadmap.md) | 阶段拆分、提交点、验收标准 |
-| [docs/08-conventions.md](docs/08-conventions.md) | 工程规范：vendor 升级、构建、安装、回滚、提交 |
+| [docs/06-design-draft.md](docs/06-design-draft.md) | 设计草案与裁决记录 |
+| [docs/07-roadmap.md](docs/07-roadmap.md) | 阶段拆分、提交点、逐阶段验收记录 |
+| [docs/08-conventions.md](docs/08-conventions.md) | vendor 升级、构建、安装、回滚、提交规范 |
 | [docs/09-risks.md](docs/09-risks.md) | 风险与缓解 |
-| [docs/10-finding-duplicate-session-id-menu.md](docs/10-finding-duplicate-session-id-menu.md) | 「复制 Session ID / 复制会话ID」重复项定性 |
-| [docs/11-maintenance-log.md](docs/11-maintenance-log.md) | 维护日志：pnpm 安装链修复（M1）、行菜单去重与改造（M2）、P2–P5 各阶段落地（M4–M11） |
-| [docs/12-release-rollback.md](docs/12-release-rollback.md) | **发布与回滚手册**：发布门禁、首次安装、日常/上游升级、临时禁用、卸载与快照还原、版本回滚、数据清理、故障排查、演练记录 |
+| [docs/10-finding-duplicate-session-id-menu.md](docs/10-finding-duplicate-session-id-menu.md) | 「复制 Session ID」重复项定性 |
+| [docs/11-maintenance-log.md](docs/11-maintenance-log.md) | 维护日志 M1–M11 |
+| [docs/12-release-rollback.md](docs/12-release-rollback.md) | 发布与回滚手册 |
+| [docs/13-environments.md](docs/13-environments.md) | 各环境部署指南与难度 |
+| [docs/14-known-issues.md](docs/14-known-issues.md) | 已知问题清单 |
 
-## 环境基线
+## 后续改进
 
-- DSH `0.2.1-rc.2`（MIT），profile = `web`，服务 `dsh-web.service`
-- 核心客户端包位置：`/root/.nvm/versions/node/v22.21.1/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/`（305 个包）
-- 被 fork 目标：`@deepseek-ai/dsh-client-ui-workspace@0.2.1-rc.2`（`lib/client.js` 232,668 B / 5,354 行，非压缩、保留注释）
-- 本机插件开发仓库：`/root/dsh-plugins/`（独立 git 仓库，工作区当前有其它未提交改动，**本仓库提交不要混入**）
+- 分组导入/导出 UI（现在靠 localStorage 手抄）；
+- 分组颜色与图标、组内自由排序；
+- 跟随 DSH 上游自动 rebase 的 helper（现在靠人工 patch）；
+- e2e 扩到「排序 / 归档 / 搜索」交叉场景，接入 CI（需 chrome runner）。
 
-## 本机安装方式（P1 落地）
+## 许可与致谢
 
-pnpm 侧存在**预先存在**的解析故障：profile 依赖 `dsh-preset-workbench@^0.1.3` 在 npmmirror 上已无法解析（只剩 1.0.2），
-导致任何 `dsh plugin add` 都会 `ERR_PNPM_NO_MATCHING_VERSION` 失败。因此本仓按 profile 里 `dsh-ops` 同款方式**手工 link 安装**：
-
-```bash
-# 1) profile 依赖登记（已做）
-#    /root/.dsh/profiles/web/package.json:
-#      dependencies["dsh-session-groups"] = "link:/root/dsh-session-groups"
-#      dsh.profile.bundles += "dsh-session-groups"
-# 2) 软链（已做）
-ln -sfn /root/dsh-session-groups /root/.dsh/profiles/web/node_modules/dsh-session-groups
-```
-
-好处：源码目录即生效目录（无硬链接农场、无需 `cp -f`），改完刷新页面即可。
-回滚：删 bundles 里那一行 + 删软链 + 恢复快照 `20261021-193308-pre-session-groups`。
-
-## 快速命令（P1 之后生效）
-
-```bash
-node scripts/vendor.mjs     # 从安装目录重新 vendor 上游 client.js 并校验 sha256
-node scripts/build.mjs      # pristine + patches → lib/client.js + lib/index.js
-node scripts/verify.mjs     # 校验 lib/client.js 与 pristine/patch 一致、id 与注入声明正确
-node scripts/e2e.mjs --url "http://127.0.0.1:3099/?token=…"   # 端到端冒烟（自起临时 chrome；需先起探针实例）
-```
+- MIT。见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
+- 上游版权归 DeepSeek；本仓库对 `@deepseek-ai/dsh-client-ui-workspace` 的派生部分保留原许可与署名。
+- 感谢 DSH 团队提供的可扩展插件架构。

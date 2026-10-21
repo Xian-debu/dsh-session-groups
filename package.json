@@ -1,10 +1,28 @@
 {
   "name": "dsh-session-groups",
-  "version": "0.1.0",
-  "private": true,
+  "version": "1.0.0",
+  "description": "Custom session groups for the DeepSeek Harness Web sidebar: a fourth grouping mode with pinned section, drag & drop, context menu, keyboard access and per-group paging (MIT fork of @deepseek-ai/dsh-client-ui-workspace).",
   "type": "module",
-  "description": "DSH Web 会话侧栏第四种分组方式：自定义分组（fork of @deepseek-ai/dsh-client-ui-workspace，MIT）",
   "license": "MIT",
+  "author": {
+    "name": "dsh-session-groups contributors"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "session-groups",
+    "sidebar",
+    "custom-groups"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Xian-debu/dsh-session-groups.git"
+  },
+  "homepage": "https://github.com/Xian-debu/dsh-session-groups#readme",
+  "bugs": {
+    "url": "https://github.com/Xian-debu/dsh-session-groups/issues"
+  },
   "main": "lib/index.js",
   "exports": {
     ".": {
@@ -23,14 +41,19 @@
     "scripts",
     "cordis.patch.yml",
     "README.md",
-    "NOTICE"
+    "README.en.md",
+    "CHANGELOG.md",
+    "NOTICE",
+    "LICENSE"
   ],
   "scripts": {
     "vendor": "node scripts/vendor.mjs",
     "build": "node scripts/build.mjs",
     "verify": "node scripts/verify.mjs",
     "e2e": "node scripts/e2e.mjs",
-    "check": "node scripts/verify.mjs"
+    "check": "node scripts/verify.mjs",
+    "install": "node scripts/install.mjs",
+    "uninstall": "node scripts/install.mjs --remove"
   },
   "dsh": {
     "bundle": {

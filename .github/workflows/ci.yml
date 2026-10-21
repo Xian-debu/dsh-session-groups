@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: build + verify (offline, no DSH install needed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Toolchain
+        run: |
+          node --version
+          git --version
+
+      - name: Build lib/client.js from pristine + patches
+        run: node scripts/build.mjs
+
+      - name: Committed artifact must equal a fresh build
+        run: git diff --exit-code -- lib/client.js
+
+      - name: Verify invariants (V1d/V2/V3/V4 offline)
+        run: node scripts/verify.mjs
+
+  syntax:
+    name: syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: node --check on shipped JS
+        run: |
+          node --check lib/client.js
+          node --check lib/index.js
+          node --check scripts/build.mjs
+          node --check scripts/vendor.mjs
+          node --check scripts/verify.mjs
+          node --check scripts/install.mjs
+          node --check scripts/e2e.mjs
