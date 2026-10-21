@@ -76,3 +76,30 @@ dsh-preset-workbench@^0.1.3 while fetching it from https://registry.npmmirror.co
 
 ## 附：本轮其它已定事项
 - P2 设计默认值（docs/06 的 Q2-Q12）按推荐值执行，除非后续对话另有裁决；Q1「唯一归属」已由用户裁决为文件夹语义。
+
+## M3（2026-10-21）· dsh-session-md-export 落地与探针验证
+
+### 交付物
+- 新插件仓库目录 `/root/dsh-plugins/dsh-session-md-export`（host 半 `src/host/index.js`、client 半 `src/client/index.jsx`、`build.mjs`、`cordis.patch.yml`、README）。
+- 路由：`GET /api/session-md-export?id=<sessionId>&mode=brief|full`，仅回环；走 `sessionPersistence` 读句柄，读前 flush live session。
+- 菜单项：`sidebar.workspaces.session.menu.item`，id `export-session-markdown`，order 500（原插件同位置）。
+- profile 变更：`dependencies` 去掉 `dsh-session-id-copy`、加 `dsh-session-md-export: link:/root/dsh-plugins/dsh-session-md-export`；`dsh.profile.bundles` 同位替换；`node_modules/dsh-session-md-export` 软链指向源码目录；旧插件在 profile 的拷贝目录已删。
+
+### 验证（探针实例 3099，`DSH_PROFILE=web dsh web --port 3099 --no-open`）
+- 路由：`id=session-a2b10ae6-…` ⇒ **200 / 120,798 B** `text/markdown`；无 id ⇒ 400；不存在的 id ⇒ 404；非 GET ⇒ 405；非回环 ⇒ 403。
+- 内容：288 个 section、0 个 `<details>`（brief）；`mode=full` ⇒ 780,304 B / 239 个 `<details>`。
+- 噪声过滤：`<system-reminder>` 块剥离；`Time sampled…` / `Current runtime context.` / `<hindsight_knowledge*` / `background job …` 这类运行期通知整轮丢弃（首版 316,107 B → 过滤后 120,798 B）。
+- 踩坑 1：中文标题写进 `content-disposition` 直接抛 `Invalid character in header content` ⇒ 改 ASCII 兜底 + RFC 5987 `filename*=UTF-8''…`。
+- 踩坑 2：host 半改代码后**运行中的进程不会重新 import**（`touch cordis.patch.yml` 也无效）；必须重启 dsh-web。探针实例改完即重启即可验证。
+- client chunk：`/plugins/??dsh-session-md-export/client.js&rev=231e93911877` 在 3099 与 **3080 都返回 200 / 5,595 B**，内容含 `export-session-markdown` 与 `session-md-export.toast` ⇒ 客户端半已随 chunk 热可用，刷新页面即出现菜单项。
+- 已知状态：3080 的宿主半挂的是**修复前的旧代码**，点菜单会得到 500；重启一次 `systemctl restart dsh-web` 后即为最终版本。
+
+### 命令
+```bash
+# 构建
+cd /root/dsh-plugins/dsh-session-md-export && npm install && node build.mjs
+# 生效（宿主半必须重启）
+systemctl restart dsh-web
+# 回滚
+# 删 profile package.json 里 dsh-session-md-export 依赖与 bundles 条目、删软链，恢复 dsh-session-id-copy 条目
+```
