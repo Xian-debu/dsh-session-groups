@@ -243,7 +243,7 @@ gh repo create Xian-debu/dsh-session-groups --public --source . --push
 | [docs/08-conventions.md](docs/08-conventions.md) | vendor 升级、构建、安装、回滚、提交规范 |
 | [docs/09-risks.md](docs/09-risks.md) | 风险与缓解 |
 | [docs/10-finding-duplicate-session-id-menu.md](docs/10-finding-duplicate-session-id-menu.md) | 「复制 Session ID」重复项定性 |
-| [docs/11-maintenance-log.md](docs/11-maintenance-log.md) | 维护日志 M1–M11 |
+| [docs/11-maintenance-log.md](docs/11-maintenance-log.md) | 维护日志 M1–M12 |
 | [docs/12-release-rollback.md](docs/12-release-rollback.md) | 发布与回滚手册 |
 | [docs/13-environments.md](docs/13-environments.md) | 各环境部署指南与难度 |
 | [docs/14-known-issues.md](docs/14-known-issues.md) | 已知问题清单 |

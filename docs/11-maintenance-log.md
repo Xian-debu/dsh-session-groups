@@ -306,3 +306,38 @@ systemctl restart dsh-web
 ### 下一步
 - P0–P5 全部落地并提交。后续维护节奏：上游 DSH 升级走 `vendor → build → verify → e2e`（手册 12.4）；任何新改动继续「改 → 出 patch → build → verify → e2e → 文档 → 提交」。
 
+## M12（2026-10-21）· 仓库升级为可发布 GitHub 部署包（v1.0.0 公开）
+
+### 目标
+把仓库本身做成**可复现部署包**：别人 clone 下来 `build → verify → install` 就能用，README 讲清依赖、环境差异、已知问题与维护者发布流程；创建公开仓库并推送。
+
+### 交付
+- **许可**：`LICENSE`（MIT，含上游派生声明）+ `NOTICE`（保留 `@deepseek-ai/dsh-client-ui-workspace` 署名）。
+- **包元数据**：`package.json` 升 1.0.0、去 private、补 description/keywords/repository/homepage/bugs、`files` 收录 README.en/CHANGELOG/LICENSE，新增 `install`/`uninstall` 脚本。
+- **安装器** `scripts/install.mjs`：`--profile`/`--home`/`--dry-run`/`--check`/`--remove`/`--json`；登记 `link:` 依赖、追加 bundles、建软链（win32 junction）、写前 `package.json.bak.<UTC>` 备份（重名递增）；`--check` 退出码 0/1。
+- **CI** `.github/workflows/ci.yml`：`verify` job 跑 build → `git diff --exit-code -- lib/client.js` → verify；`syntax` job 对全部 JS 跑 `node --check`。触发分支 `main` 与 `master`。
+- **离线自检**：`verify.mjs` 增加 `tryUpstream()`，无本机 DSH 时执行 V1d（vendored 快照 sha256 vs `vendor/upstream.json`）并跳过 V1b/V1c，V4 改为与 `upstream.json` 的 inject 集合比对 ⇒ CI 无需 DSH 安装即可验证补丁完整性。
+- **文档**：`docs/13-environments.md`（六类环境难度与步骤）、`docs/14-known-issues.md`（K1–K15）、README 中文重写（特性/安装三方式/用法/键盘表/数据隐私/验证/已知问题/环境难度/升级卸载回滚/仓库结构/开发流程/维护者发布流程/文档索引）、`README.en.md`、`CHANGELOG.md`。
+- **截图**：`docs/images/overview.png`（600×1520，侧栏）、`docs/images/group-menu.png`（840×1520，分组菜单 + 焦点环）、`docs/images/move-dialog.png`（1440×900，Move to group 弹窗），全部用示意会话名替换真实标题。
+
+### 验证
+1. `node scripts/build.mjs` → `lib/client.js` **267,425 B / sha256 39dd618c…`，7 个 patch，与已提交产物逐字节一致。
+2. `node scripts/verify.mjs` → **PASS (11 checks)**（V1a/V1d/V1b/V1c/V2a/V2b/V3a–d/V4）。
+3. **干净 clone**（`git clone /root/dsh-session-groups /tmp/pkgtest`）→ build 逐字节一致、verify PASS、`git status` 干净；假 profile 上 install dry-run 输出三项动作正确。
+4. 真实 profile `node scripts/install.mjs --check` → OK（`link:/root/dsh-session-groups`、bundles 27 项、软链正确）。
+5. **GitHub Actions**：run 39616869671 在无 DSH 安装的 ubuntu-latest 上 **success**（build 产出一致 + 离线 verify 通过），证明部署包在别人机器上可复现。
+
+### 仓库
+- 公开地址：<https://github.com/Xian-debu/dsh-session-groups>（默认分支 `master`，MIT，已打 topics）。
+- 提交：`5d8ad68`（打包收尾）+ `ac2c33b`（CI 触发分支补 master）+ 本次（M12 记录）。
+- 认证：`gh` 已登录 `Xian-debu`（scopes `repo`/`read:org`/`workflow`）；环境里 `GITHUB_TOKEN` 为 unset，避免过期变量覆盖登录态。
+
+### 踩坑
+1. **CI 不触发**：workflow 写的是 `branches: [main]`，而默认分支是 `master` ⇒ push 后 0 次运行。补上 `master` 后立即排队。
+2. **截图脚本挂住**：CDP WebSocket 未关闭时 Node 进程不退出，bash 调用被 promote 到后台并“超时”；结尾加 `process.exit(0)` 即可。
+3. **会话行「⋯」按钮不在 DOM 里常驻**：未选中/未聚焦的行不渲染按钮，探针直接查会取到 `null`；改用全局 `[data-row-key^=session] button[aria-label^="Session actions for"]` 列表取第一个即可。
+4. **raw.githubusercontent.com 在本机不可达**：校验远端文件用 `gh api .../contents/<path> --jq .content | base64 -d`。
+
+### 下一步
+- 观察 CI badge 与 issue 区；上游 DSH 发版后按 docs/12 §12.4 走 `vendor → 重基 patch → build → verify → e2e`。
+- 可选增强：分组导入/导出 UI、分组颜色、patch 自动 rebase helper（见 README「后续改进」）。
