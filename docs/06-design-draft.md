@@ -82,7 +82,8 @@
 
 - 复用 `dsh-client-ui-primitives` 的 chevron / folder / ellipsis 图标与既有行高（与工作区分组头一致）。
 - 分组头展开态用 `aria-expanded`；拖放目标高亮用 `data-drop-target` 属性 + 主题色描边，不写死颜色。
-- 键盘：分组头 Enter/Space 折叠；F2 重命名；Delete 需二次确认。
+- 键盘（P4c 已实现）：分组头 `tabIndex=0`，焦点显示 2px accent 焦点环（优先于拖拽提示）；Enter/Space 折叠，F2 行内重命名（Enter 提交 / Esc 取消），Shift+F10 或 ContextMenu 打开 `⋯` 菜单并聚焦首项，菜单内 ArrowUp/ArrowDown/Home/End 循环移动、Esc 关闭并归还焦点、Tab 关闭；删除确认条 Esc 取消、Delete 按钮自动聚焦。
+- 装饰图标（folder / chevron）`aria-hidden`；菜单锚 `aria-haspopup="menu"` + `aria-expanded`；Modal 选项 `aria-current` 标记当前归属。
 - 文案入 locale（`ctx.locale.register("workspace", …)` 扩展键 `groupBy.custom` / `group.custom.new` 等）。
 
 ## 6.6 兼容与回滚

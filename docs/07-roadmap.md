@@ -9,7 +9,8 @@
 | **P3b** ✅ | 拖入 / 拖出 | `patches/0003-p3b-drag.patch`、会话行 `drag` 接线、分组头 drop 热区（`DROP_HINT_STYLE` / `DROP_HOVER_STYLE`）、`assign`/`unassign` 提交、`lib/client.js` 254,388 B | 探针 3099 CDP 验收（见下方「P3b 验收记录」）：拖入分组、拖回未分组、刷新保留、drop 高亮全通，0 console error | `09-p3b-drag` |
 | **P4a** ✅ | 置顶会话独立区 | `patches/0004-p4a-pinned.patch`、`PINNED_SECTION_KEY`、`deriveCustomSections` 的 `pinned` 返回、`CustomGroupHeader` 的 `kind` 三态、`lib/client.js` 255,774 B | 探针 3099 CDP 验收（见下方「P4a 验收记录」）：置顶区在顶部独立成节、pin 会话不进分组且只出现一次、可折叠、取消置顶回落原分组、归档筛选不崩，0 console error | `10-p4a-pinned` |
 | **P4b** ✅ | 会话行「⋯」菜单归组 | `patches/0005-p4b-menu-move.patch`、`MoveSessionToGroupMenuItem` / `RemoveSessionFromGroupMenuItem` / `MoveSessionDialog`、模块级 request store、locale zh/en 各 4 键、`lib/client.js` 261,838 B | 探针 3099 CDP 验收（见下方「P4b 验收记录」）：菜单项按归组状态条件出现、Modal 三选项、assign 落盘、行唯一移动、取消归组、刷新保留，0 console error | `11-p4b-menu-move` |
-| **P4c–d** | 协同打磨剩余项 | 键盘可达 + locale/aria；每组水印分页 + 折叠头拖拽自动展开 + 组内排序取舍 | 无 console error；视觉与原生分组头一致 | `12-p4c-…` 起 |
+| **P4c** ✅ | 分组头 / 菜单键盘可达 + aria / locale 补全 | `patches/0006-p4c-keyboard.patch`（179 行）、`FOCUS_RING_STYLE`、头节点 `tabIndex=0` + `aria-label`/`aria-expanded`、Enter/空格折叠、F2 改名、Shift+F10/ContextMenu 开菜单、菜单内方向键/Home/End/Esc/Tab 导航、菜单锚 `aria-haspopup`/`aria-expanded`、装饰图标 `aria-hidden`、删除确认 Esc + Delete 自动聚焦、Modal 选项 `aria-current` + `autoFocus`、`lib/client.js` 265,401 B | 探针 3099 CDP 验收（见下方「P4c 验收记录」）：32 项全绿、0 console error（焦点环、折叠落盘、F2 改名/Esc、键盘开菜单并聚焦首项、方向键移动、Enter 激活、确认条 Esc/自动聚焦） | `12-p4c-keyboard` |
+| **P4d** | 每组水印分页 + 折叠头拖拽自动展开 + 组内排序取舍 | 分页游标与「加载更多」、dragOver 定时展开、组内 order 方案取舍文档 | 无 console error；视觉与原生分组头一致 | `13-p4d-…` 起 |
 | **P5** | e2e + 发布 + 回滚手册 | CDP e2e 脚本、发布步骤、快照回滚演练 | 一次完整安装→使用→回滚演练通过 | `06-release` |
 
 ## 每阶段固定动作
@@ -66,6 +67,19 @@
 - 管线：`node scripts/build.mjs` → `lib/client.js` 261,838 B / sha256 `b35a75e4b415756cb8427301d31f87a4416720719ac724c80ce4c9891fd9ff3d`，patches = 0001..0005；`node scripts/verify.mjs` → **PASS (10 checks)**；重建产物与手改文件逐字节一致。
 - 探针（3099 + CDP 1440×900，界面语言 en）：localStorage 预置两个分组（Group 1 / Group 2）→ 真实 UI 走 `View options → Custom groups` 切到自定义模式（`dsh.workspace.view.v5.groupBy = "custom"`）→ 选一条**非置顶、有 ⋯ 按钮**的会话行 → 点 `⋯`：菜单按序为 `Pin session / Rename / Fork session / Move to group… / Archive session / Copy Session ID / Export session as Markdown`，**未归组时没有** `Remove from custom group`；点 `Move to group…` ⇒ Modal 三选项 `Group 1 / Group 2 / No group (remove)`（当前归属打勾）；点 `Group 1` ⇒ `assignments[session-…] = "g1"` 落盘、Modal 关闭、该行**只出现一次**且位于 `Group 1` 节下；再点 `⋯` ⇒ 出现 `Remove from custom group`，点掉 ⇒ `assignments` 清空、行离开分组节；再归组到 `Group 2` 后 `Page.reload` ⇒ 模式仍为 custom、assignment 仍在、行仍在 `Group 2` 节下。**0 console error / 0 page exception**。截图：`/tmp/p4b-dialog.png`（Modal）、`/tmp/p4b-menu.png`（归组后侧栏）。
 - 探针坑（新增）：① `scripts/build.mjs` 会 **pristine + patches 重写 `lib/client.js`**，所以 patch 必须在 build **之前**生成（顺序：手改 → `diff -u` 出 patch → build → verify 逐字节比对），否则手改内容被抹平、patch 变 0 行（本次已踩过一次）；② 宿主**没有真正的 `contextmenu`**，合成 `MouseEvent("contextmenu")` 不会开菜单，必须点行内 `button[aria-label^="Session actions for"]`；③ `New Session`（blank）行**不渲染** ⋯ 按钮，探针需跳过；④ 置顶会话的显示优先级高于归组，探针必须选非置顶行，否则归组后行仍留在 `Pinned` 节；⑤ 分组头标题是 `span[class*="_title"]`（不是 button），且 assignment 的键是**裸 session id**（无 `session:` 前缀），与 `data-row-key` 的 `session:` 前缀要做转换；⑥ 先 `localStorage` 预置再 reload 会被页面卸载时的状态回写覆盖，稳妥做法是预置后只 reload 一次，模式切换走真实 UI。
+
+## P4c 验收记录（2026-10-21）
+
+- 交付物：`patches/0006-p4c-keyboard.patch`（179 行，基线 `git show 4b0900f:lib/client.js`）；`node scripts/build.mjs` → `lib/client.js` **265,401 B / sha256 `71f417707d9b7afd36f9b5ee30b76e2129e278877d90833ce7a2b64b3e7e30f5`**，patches 0001..0006；pristine+patches 重建与手改逐字节一致；`node scripts/verify.mjs` → PASS (10 checks)。
+- 键盘模型：分组头 `div[data-row-key]` 加 `tabIndex=0` + `aria-label`（已有 `aria-expanded`）；Enter/空格 = 折叠切换，F2（仅真实分组）= 行内改名，Shift+F10 / ContextMenu = 打开 `⋯` 菜单；焦点时显示 `FOCUS_RING_STYLE`（2px accent 描边、outline-offset -2px），且**焦点环优先于拖拽提示**（`dropOver > focused > dropEnabled`）。
+- 菜单键盘：打开时若由键盘触发（F10/ContextMenu，或锚按钮 click 的 `detail===0`），`requestAnimationFrame` 聚焦第一个菜单项；document capture keydown 处理 ArrowDown/ArrowUp（循环）、Home/End、Escape（关闭并把焦点还给锚按钮）、Tab（关闭后交还浏览器）。
+- a11y/locale：菜单锚补 `aria-haspopup="menu"` / `aria-expanded`；folder 与 chevron 图标 `aria-hidden`；删除确认条 `tabIndex=0` + `aria-label`，Escape 取消，确认 Delete 按钮 `autoFocus`；Modal 选项 `aria-current`（选中）+ `autoFocus`。locale 无新增键（复用 `custom.groupActions` 等既有键）。
+- 探针：`/tmp/p4c.mjs` + `/tmp/p4c-helper.js`，`bash /tmp/restart-chrome.sh` 后跑 3099（token URL），**32/32 PASS、0 console error / 0 exception**；截图 `/tmp/p4c-header-focus.png`（焦点环）、`/tmp/p4c-final.png`（删除 g1 后只剩 Group 2）。
+- 探针踩坑（新增，重要）：
+  1. **headless 页面必须 `Page.bringToFront`**：否则 `document.hasFocus()===false`，`element.focus()` 只设置 `activeElement` 而不派发 focus/focusin，React `onFocus` 不触发 ⇒ 焦点环断言假失败（`style` 始终为 null）。
+  2. CDP 触发 Enter 激活按钮要用 `Input.dispatchKeyEvent` 的 **`type: "keyDown"` + `text: "\r"`**（`rawKeyDown` 不触发 button 默认动作）。
+  3. 菜单打开后焦点**不会**自动进入菜单（activeElement 仍是头节点），必须自己 rAF 聚焦首项；菜单项是 `button[role=menuitem][tabindex=0]`。
+  4. 删除确认条只出现在「菜单已关闭」状态：若上一步 Enter 未激活导致菜单仍开着，再点锚按钮会把它关掉 ⇒ 断言前先确保菜单关闭（按 Esc 收尾）。
 
 ## 后续阶段的固定待办
 

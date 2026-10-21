@@ -231,3 +231,28 @@ systemctl restart dsh-web
 ### 下一步（P4c / P4d）
 - P4c：分组头与菜单项的键盘可达（Tab/Enter/Esc、`aria-expanded` / `aria-haspopup`），以及 locale 全键覆盖检查。
 - P4d：每组水印分页（成员多时的分页）、折叠头拖拽经过自动展开、组内排序取舍。
+
+
+## M9（2026-10-21）· P4c 分组头 / 菜单键盘可达落地
+
+### 交付物
+- `patches/0006-p4c-keyboard.patch`（179 行，基线 = P4b 提交 `4b0900f` 的 `lib/client.js`），产物 `lib/client.js` **265,401 B / sha256 `71f417707d9b7afd36f9b5ee30b76e2129e278877d90833ce7a2b64b3e7e30f5`**，patches = 0001..0006；pristine+patches 重建与手改逐字节一致，`node scripts/verify.mjs` PASS (10 checks)。
+- 分组头：新增 `FOCUS_RING_STYLE`（2px `--dsw-alias-state-accent-primary` 描边、`outlineOffset: -2px`、圆角 6px）；根节点 `tabIndex: 0` + `aria-label`（保留既有 `aria-expanded`）+ `onFocus/onBlur` 维护 `focused`；style 优先级 `dropOver > focused > dropEnabled`（焦点环优先于拖拽提示）。
+- 键盘：Enter/空格切换折叠（`e.target === e.currentTarget` 守卫、`preventDefault` 防滚动）；F2 仅 `kind === "group"` 进入行内改名；Shift+F10 / ContextMenu 打开 `⋯` 菜单并置 `menuOpenedByKeyboard`。
+- 菜单导航 effect（依赖 `[menuOpen]`）：`requestAnimationFrame` 聚焦首个 `[role="menuitem"]`（宿主菜单项为 `button[role=menuitem][tabindex=0]`，且打开后焦点不会自动进入）；document capture keydown 处理 ArrowDown/ArrowUp（循环）、Home/End、Escape（关闭 + 焦点还给菜单锚按钮）、Tab（关闭）。
+- a11y：菜单锚 `aria-haspopup="menu"` + `aria-expanded`；folder/chevron 图标 `aria-hidden`；删除确认条 `tabIndex=0` + `aria-label` + Esc 取消，确认 Delete `autoFocus`；MoveSessionDialog 选项 `aria-current` + `autoFocus`（选中项）。无新增 locale 键。
+- 截图：`/tmp/p4c-header-focus.png`（分组头焦点环）、`/tmp/p4c-final.png`（删除后仅剩 Group 2）。
+
+### 验收（探针 3099 + CDP，未碰生产 3080）
+- `/tmp/p4c.mjs` + `/tmp/p4c-helper.js`：**32/32 PASS、0 console error / 0 page exception**。覆盖：头 `tabIndex=0`/`aria-label`/`aria-expanded`、菜单锚 `aria-haspopup`/`aria-expanded`、装饰图标 `aria-hidden` 数量、焦点环（computed `solid 2px rgba(64,128,255,0.8)` / offset `-2px`）、Enter 折叠并落盘 `collapsed.g1=true` + 子行隐藏、Space 展开、F2 改名 Enter 提交 / Esc 取消、Shift+F10 开菜单并自动聚焦首项、ArrowDown/ArrowUp 移动、Enter 激活 Rename、删除确认出现且 Delete 自动聚焦、Esc 取消确认、点击删除 g1 并清空 assignments、Group 2 仍可键盘聚焦。
+- 过程中修过一处真实 UX 缺陷：原 style 链把 `dropEnabled ? DROP_HINT_STYLE` 放在 `focused` 之前，导致分组头永远不显示焦点环；改为 `focused` 优先。
+
+### 探针踩坑（新增，重要）
+1. **headless 页面必须 `Page.bringToFront`**：否则 `document.hasFocus()===false`，`element.focus()` 只设置 `activeElement`，不派发 focus/focusin，React `onFocus` 不执行 ⇒ 焦点环一直在 but style 为 null。加上 `Page.bringToFront`（navigate/reload 后各一次）后 `focusVisible=true`、样式正常。
+2. CDP 用 Enter 激活按钮必须 `Input.dispatchKeyEvent({ type: "keyDown", key: "Enter", text: "\r", unmodifiedText: "\r", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 })`；`rawKeyDown` 不触发 button 默认动作（最初的 3 个 FAIL 之一）。
+3. 菜单打开后焦点不会自动进入菜单；必须自行 rAF 聚焦首项（已实现），否则 ArrowDown 落在头节点上。
+4. 删除确认条只在菜单关闭时出现：若 Enter 未激活导致菜单仍开着，再点锚按钮会把它关掉 ⇒ 断言前按 Esc 收尾。
+5. 探针脚本引号地狱：把页面 helper 放独立 `/tmp/p4c-helper.js`，用 `fs.readFileSync` 注入；CSS 选择器用 unquoted 属性值（`div[data-row-key^=workspace]`）。
+
+### 下一步（P4d）
+- 每组水印分页（成员多时的「加载更多」游标）+ 折叠头拖拽经过自动展开 + 组内排序取舍（`groupOrder` 与会话行 `order` 的优先级需定案）。
