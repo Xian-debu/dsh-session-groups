@@ -7,7 +7,8 @@
 | **P2** ✅ | 数据模型 + 第四种模式 + 只读渲染 | `patches/0001-custom-groups.patch`（locale + 菜单项 + 渲染分支 + store/derive/列表组件，全部落在 `lib/client.js`）、`lib/client.js` 243,751 B | 探针 3099 CDP 验收（见下方「P2 验收记录」）：菜单出现第四项、切模式后 Ungrouped 平铺、点 New group 生成 Group 1 分区、localStorage 落盘、刷新保留、0 console error | `07-p2-custom-groups` |
 | **P3a** ✅ | 分组头管理（新建入口、改名、调序、删除二次确认） | `patches/0002-p3a-group-header.patch`、`CustomGroupHeader`、store `moveGroup`、locale zh/en 各 9 键、`lib/client.js` 252,074 B | 探针 3099 CDP 验收（见下方「P3a 验收记录」）：改名、Move up、删除确认、未分组折叠全通，0 console error | `08-p3a-group-header` |
 | **P3b** ✅ | 拖入 / 拖出 | `patches/0003-p3b-drag.patch`、会话行 `drag` 接线、分组头 drop 热区（`DROP_HINT_STYLE` / `DROP_HOVER_STYLE`）、`assign`/`unassign` 提交、`lib/client.js` 254,388 B | 探针 3099 CDP 验收（见下方「P3b 验收记录」）：拖入分组、拖回未分组、刷新保留、drop 高亮全通，0 console error | `09-p3b-drag` |
-| **P4** | 与既有机制协同打磨 | 搜索/归档/排序/置顶/水印/locale/键盘 | 无 console error；视觉与原生分组头一致 | `05-polish` |
+| **P4a** ✅ | 置顶会话独立区 | `patches/0004-p4a-pinned.patch`、`PINNED_SECTION_KEY`、`deriveCustomSections` 的 `pinned` 返回、`CustomGroupHeader` 的 `kind` 三态、`lib/client.js` 255,774 B | 探针 3099 CDP 验收（见下方「P4a 验收记录」）：置顶区在顶部独立成节、pin 会话不进分组且只出现一次、可折叠、取消置顶回落原分组、归档筛选不崩，0 console error | `10-p4a-pinned` |
+| **P4b–d** | 协同打磨剩余项 | 右键「移动到分组 / 移出自定义分组」、键盘可达 + locale/aria、每组水印分页 + 折叠头拖拽自动展开 + 组内排序取舍 | 无 console error；视觉与原生分组头一致 | `11-p4b-…` 起 |
 | **P5** | e2e + 发布 + 回滚手册 | CDP e2e 脚本、发布步骤、快照回滚演练 | 一次完整安装→使用→回滚演练通过 | `06-release` |
 
 ## 每阶段固定动作
@@ -49,6 +50,13 @@
 - 管线：`node scripts/build.mjs` → `lib/client.js` 254,388 B / sha256 `0c14b706ed20187ad580d64a166ca4494196d8cf403b5474abb76a4c69ac4258`，patches = 0001,0002,0003；`node scripts/verify.mjs` → **PASS (10 checks)**。
 - 探针（3099 + CDP 1440×900，界面语言 en，拖拽用页面内 `new DragEvent(..., { dataTransfer: new DataTransfer() })` 合成）：先清 localStorage + reload → 切 **Custom groups** → 建 `g1`；挑一条 `draggable === true` 的未分组会话行（`blank` 的 New Session 行按设计不可拖，探针里用 `draggable === true` 过滤，候选 90 条）→ `dragstart` 后 dataTransfer 里是 `session-…` id，两个分组头都出现虚线提示环 → `dragover` `workspace:g1` 后该头变强调色环 + hover 底色 → `drop` 后 `assignments[session-…] = "g1"`，行归属从 `workspace:__ungrouped__` 迁到 `workspace:g1`，reload 后仍是 `workspace:g1` → 再从 `g1` 拖到 `workspace:__ungrouped__`，`assignments` 清空、行回到未分组。**0 console error / 0 page exception**。
 - 已知限制（交 P4 决定是否补）：拖拽经过折叠的分组头时不会自动展开；组内拖拽排序未接（组内顺序仍按列表原始顺序）；拖拽期间没有 `dragend` 兜底清理以外的取消动画。
+
+## P4a 验收记录（2026-10-21）
+
+- 交付：`patches/0004-p4a-pinned.patch`（202 行）。要点：locale zh/en 各加 `custom.pinned`（置顶 / Pinned）；新增 `const PINNED_SECTION_KEY = "__pinned__";`；`deriveCustomSections` 把「可见且置顶且非 blank」的会话收进独立的 `pinnedRows`（不再进任何分组桶），返回值多一个 `pinned`；`CustomGroupHeader` 增加 `kind` ∈ `"group"|"ungrouped"|"pinned"`，菜单/双击改名只在真实分组上出现，折叠键对置顶节用 `__pinned__`，置顶头 `dropEnabled = dragAccept && !pinnedHeader`（不接投放）；`CustomGroupsList` 的 sections 顺序改为「置顶节（有置顶才出现）→ 各真实分组 → 未分组」，置顶行 `drag: void 0`（不可拖，归组留给 P4b 右键菜单）。
+- 管线：`node scripts/build.mjs` → `lib/client.js` 255,774 B / sha256 `98500cc762136e3064429e84c00af4e86e562940249fa3bf05d75712a1d689e4`，patches = 0001,0002,0003,0004；`node scripts/verify.mjs` → **PASS (10 checks)**。
+- 探针（3099 + CDP 1440×900，界面语言 en）：切 **Custom groups** → 点行内 `Pin session` ⇒ `data-row-key` 首行变 `workspace:__pinned__`（文本 `Pinned`），置顶会话落在其下、未分组节仍在；点 `Pinned` 头 ⇒ `expanded="false"`、该会话行消失、`collapsed["__pinned__"] = true` 落盘；再点展开后 `Unpin session` ⇒ 行回到未分组；随后用 localStorage 预置 `assignments[session-…] = "g1"` 再 pin + reload ⇒ 该会话**只出现一次**（在置顶节），`Group 1` 只剩空头 —— 证明置顶优先级高于归组、显示唯一；`Archived only` 筛选下自定义模式正常渲染分组头（置顶区因无归档置顶会话而隐藏），切回 `Hide archived` 恢复。**0 console error / 0 page exception**（reload 后清空日志缓冲再断言）。
+- 探针坑（新增）：① root 下 headless chrome 必须 `--no-sandbox`，否则直接退出；② 复用旧 chrome 实例会 `timeout Page.navigate` / `timeout Runtime.evaluate`，**每个脚本前重启 chrome**（pkill 模式 `cdp-prof-p4`）最稳；③ 会话行的 `Pin session` 按钮在 hover 才渲染，且 hover 后原 row 引用可能失效 ⇒ 直接在页面全局取第一个 `button[aria-label="Pin session"]` 点击，再用 `closest("[data-row-key]")` 回读归属。
 
 ## 后续阶段的固定待办
 

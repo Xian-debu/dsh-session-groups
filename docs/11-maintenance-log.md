@@ -185,3 +185,24 @@ systemctl restart dsh-web
 ### 下一步
 - P4：搜索 / 归档 / 手动排序 / 置顶 / 水印 / locale / 键盘的协同打磨，以及上面三条限制的取舍。
 
+
+## M7（2026-10-21）· P4a 置顶独立区落地
+
+### 交付物
+- `patches/0004-p4a-pinned.patch`（202 行），产物 `lib/client.js` 255,774 B / sha256 `98500cc762136e3064429e84c00af4e86e562940249fa3bf05d75712a1d689e4`，`node scripts/verify.mjs` PASS (10)。
+- 数据层：`deriveCustomSections` 先摘出置顶会话（`pinnedRows`），分组桶不再接收它们，返回值新增 `pinned`；折叠键新增常量 `PINNED_SECTION_KEY = "__pinned__"`（永不会与真实 groupId 冲突）。
+- 视图层：`CustomGroupsList` sections = 置顶节（仅当有置顶）→ 真实分组 → 未分组；`CustomGroupHeader` 增加 `kind` 三态，置顶头不可投放、无菜单、无双击改名；置顶行不接 `drag`（避免「拖了但视觉不动」），归组能力留给 P4b 的右键菜单。
+- locale：zh `置顶` / en `Pinned`（`custom.pinned`）。
+
+### 验收（探针 3099 + CDP，未碰生产 3080）
+- pin → 顶部出现 `Pinned` 节，会话只出现一次；折叠 → `expanded=false`、行消失、`collapsed.__pinned__=true` 落盘；unpin → 行回到原来所属容器。
+- 预置 `assignments[session]=g1` 再 pin：该会话仍只出现一次且在置顶节，`Group 1` 变空头 ⇒ 置顶优先级高于归组，与 docs/06 Q3「不参与归组」一致。
+- `Archived only` / `Hide archived` 来回切换：自定义模式正常，置顶区按归档可见性自动显隐；**0 console error / 0 page exception**。
+
+### 探针踩坑（新增两条）
+- root 下 headless chrome 必须 `--no-sandbox`，否则进程直接退出。
+- 复用旧 chrome 实例会出现 `timeout Page.navigate` / `timeout Runtime.evaluate`；每个探针脚本前调用 `/tmp/restart-chrome.sh` 重启（pkill 模式 `cdp-prof-p4`）即可稳定。
+- 行内操作按钮（`Pin session`）在 hover 后才渲染，hover 又可能让原 row 引用失效 ⇒ 全局取第一个 `button[aria-label="Pin session"]` 点击，再用 `closest("[data-row-key]")` 回读归属。
+
+### 下一步（P4b）
+- 右键菜单项：`移动到分组 ▸`（列出真实分组 + 新建分组…）/ `移出自定义分组`；置顶会话也可经此归组（置顶优先级仍最高，取消置顶后即落到所选分组）。
