@@ -34,6 +34,7 @@
 | [docs/08-conventions.md](docs/08-conventions.md) | 工程规范：vendor 升级、构建、安装、回滚、提交 |
 | [docs/09-risks.md](docs/09-risks.md) | 风险与缓解 |
 | [docs/10-finding-duplicate-session-id-menu.md](docs/10-finding-duplicate-session-id-menu.md) | 「复制 Session ID / 复制会话ID」重复项定性 |
+| [docs/11-maintenance-log.md](docs/11-maintenance-log.md) | 维护日志：pnpm 安装链修复（M1）、右键菜单去重与改造（M2） |
 
 ## 环境基线
 
