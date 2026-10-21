@@ -103,3 +103,32 @@ systemctl restart dsh-web
 # 回滚
 # 删 profile package.json 里 dsh-session-md-export 依赖与 bundles 条目、删软链，恢复 dsh-session-id-copy 条目
 ```
+
+## M4（2026-10-21）· P2 自定义分组模式落地
+
+### 交付物
+- `patches/0001-custom-groups.patch`（352 行）：locale（zh/en 各 3 键）、`ViewOptionsMenu` 第四项、渲染分派分支、新代码块。
+- 新代码块（region `lib/types/client/session-groups.js`，全部在 `lib/client.js` 内）：
+  - 常量/默认态：`SESSION_GROUPS_KEY = "dsh.sessionGroups.v1"`、`defaultSessionGroupsState()`；
+  - `loadSessionGroupsState()`（校验 version/结构，坏数据回落默认）；
+  - `createSessionGroupsStore()` → `{getSnapshot, subscribe, actions:{createGroup, renameGroup, removeGroup, toggleGroup, assign, unassign}}`，commit 写 `updatedAt` + localStorage + 广播；模块级单例 `sessionGroupsHandle`；
+  - `deriveCustomSections(list, rowState, statuses, groupsState)`：按 `assignments[session.id]` 入桶（唯一归属），未归组进 `""` 桶；顺序 = groupOrder 现存 id + 未登记 id；
+  - `CustomGroupsList`：`useSyncExternalStore` 订阅，`HoverCardGroup` + `AnimatedRows`，分组头复用 `ProjectRowItem`（workspaceId 传 groupId、`cwd/createdAt: void 0` 触发「Ungrouped」文案），行复用 `SessionNodeItem`，尾部 `New group` 按钮（`data-row-key="custom:new-group"`）。
+- 产物：`lib/client.js` 243,751 B / sha256 `050a5de8d0a5345d1bf8409c2e8f472021a4cccff487b9d91f3550c63e598a9c`；`node scripts/verify.mjs` PASS (10 checks)。
+
+### 验收（探针 3099 + CDP，未碰生产 3080）
+- chunk `/plugins/??dsh-session-groups/client.js&rev=398cd4badd48` → 200 / 243,791 B。
+- 视图选项菜单：WorkSpace / Workspace Tree / In one list / **Custom groups**（选中后勾选落在 Custom groups）。
+- 切到 Custom groups：`Ungrouped` 单节 + 全部会话平铺 + `New group`；点 New group ⇒ `Group 1` + `Ungrouped`，localStorage 落盘，`data-row-key` 正确；0 console error / 0 page exception。
+- 截图证明：`/tmp/p2-custom.png`（1440×900）。
+
+### 坑与教训
+- CDP 里按文案点菜单必须用**界面当前语言**；本机 GUI 是 en，第一次按中文点失败。
+- `google-chrome --headless=new` 每次都要设 `Emulation.setDeviceMetricsOverride`（1440×900），窄视口会让侧栏折叠、`[draggable='true']` 归零。
+- chrome profile 目录偶发 `ENOTEMPTY …/Default`，删除要重试。
+- 软链安装 ⇒ client 半改动随 chunk 的 rev（mtime/ctime/size 派生）自动热更，刷新页面即可；**宿主半改动仍需重启 dsh-web**。
+
+### 下一步（P3）
+- 拖入/拖出：复用 `sessionDragOrder` / `commitSessionDrag` 的 drag 状态但新增「跨容器 = assign/unassign」提交；分组头做 drop 热区。
+- 分组管理菜单：新建（含分组头入口）、改名、删除（二次确认）、拖拽调序；对应 docs/06 Q9/Q11。
+

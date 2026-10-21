@@ -1,0 +1,352 @@
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -2903,6 +2903,11 @@
+ 						icon: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconFlatListOutlineRegular, {})
+ 					},
+ 					{
++						id: "custom",
++						label: t("groupBy.custom"),
++						icon: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconFolderOpenRegular, {})
++					},
++					{
+ 						type: "separator",
+ 						id: "order-by-separator"
+ 					},
+@@ -2956,7 +2961,7 @@
+ 					}[archivedFilter]
+ 				],
+ 				onSelect: (id) => {
+-					if (id === "workspace" || id === "workspace-tree" || id === "flat") onGroupPick(id);
++					if (id === "workspace" || id === "workspace-tree" || id === "flat" || id === "custom") onGroupPick(id);
+ 					else if (id === "manual" || id === "updated") onOrderPick(id);
+ 					else if (id === "hide-archived") onArchivedFilterPick("default");
+ 					else if (id === "show-archived") onArchivedFilterPick("show");
+@@ -3351,6 +3356,287 @@
+ 				]
+ 			});
+ 		}
++		//#region lib/types/client/session-groups.js
++		/** Browser-local custom Session groups; assignments are the only membership truth. */
++		const SESSION_GROUPS_KEY = "dsh.sessionGroups.v1";
++		function defaultSessionGroupsState() {
++			return {
++				version: 1,
++				groups: [],
++				assignments: {},
++				groupOrder: [],
++				ungroupedOrder: [],
++				collapsed: {},
++				updatedAt: 0
++			};
++		}
++		/**
++		* Read the persisted custom-groups state, tolerating older or damaged payloads.
++		* @returns a valid state object (defaults on any parse failure).
++		*/
++		function loadSessionGroupsState() {
++			try {
++				const raw = window.localStorage.getItem(SESSION_GROUPS_KEY);
++				if (raw === null) return defaultSessionGroupsState();
++				const parsed = JSON.parse(raw);
++				if (parsed === null || typeof parsed !== "object" || parsed.version !== 1) return defaultSessionGroupsState();
++				const groups = Array.isArray(parsed.groups) ? parsed.groups.filter((group) => group !== null && typeof group === "object" && typeof group.id === "string" && typeof group.name === "string") : [];
++				return {
++					...defaultSessionGroupsState(),
++					...parsed,
++					groups,
++					assignments: parsed.assignments !== null && typeof parsed.assignments === "object" ? parsed.assignments : {},
++					groupOrder: Array.isArray(parsed.groupOrder) ? parsed.groupOrder : [],
++					collapsed: parsed.collapsed !== null && typeof parsed.collapsed === "object" ? parsed.collapsed : {}
++				};
++			} catch (error) {
++				console.warn("session groups load failed:", error);
++				return defaultSessionGroupsState();
++			}
++		}
++		/**
++		* Create the custom-groups store handle (subscribe + getSnapshot pair).
++		* @returns the handle shared by the browser body and the group controls.
++		*/
++		function createSessionGroupsStore() {
++			let state = loadSessionGroupsState();
++			const listeners = /* @__PURE__ */ new Set();
++			const commit = (next) => {
++				state = {
++					...next,
++					updatedAt: Date.now()
++				};
++				try {
++					window.localStorage.setItem(SESSION_GROUPS_KEY, JSON.stringify(state));
++				} catch (error) {
++					console.warn("session groups persist failed:", error);
++				}
++				for (const listener of [...listeners]) listener();
++			};
++			const nextGroupId = () => {
++				let index = 1;
++				while (state.groups.some((group) => group.id === "g" + index)) index += 1;
++				return "g" + index;
++			};
++			return {
++				getSnapshot: () => state,
++				subscribe: (listener) => {
++					listeners.add(listener);
++					return () => {
++						listeners.delete(listener);
++					};
++				},
++				actions: {
++					createGroup: (name) => {
++						const id = nextGroupId();
++						commit({
++							...state,
++							groups: [...state.groups, {
++								id,
++								name,
++								createdAt: Date.now()
++							}],
++							groupOrder: [...state.groupOrder, id]
++						});
++						return id;
++					},
++					renameGroup: (id, name) => {
++						commit({
++							...state,
++							groups: state.groups.map((group) => group.id === id ? {
++								...group,
++								name
++							} : group)
++						});
++					},
++					removeGroup: (id) => {
++						const assignments = Object.fromEntries(Object.entries(state.assignments).filter(([, groupId]) => groupId !== id));
++						commit({
++							...state,
++							groups: state.groups.filter((group) => group.id !== id),
++							groupOrder: state.groupOrder.filter((key) => key !== id),
++							assignments
++						});
++					},
++					toggleGroup: (id) => {
++						commit({
++							...state,
++							collapsed: {
++								...state.collapsed,
++								[id]: state.collapsed[id] !== true
++							}
++						});
++					},
++					assign: (sessionId, groupId) => {
++						commit({
++							...state,
++							assignments: {
++								...state.assignments,
++								[sessionId]: groupId
++							}
++						});
++					},
++					unassign: (sessionId) => {
++						const assignments = { ...state.assignments };
++						delete assignments[sessionId];
++						commit({
++							...state,
++							assignments
++						});
++					}
++				}
++			};
++		}
++		const sessionGroupsHandle = createSessionGroupsStore();
++		/**
++		* Bucket the visible Sessions into the caller-ordered custom groups.
++		* @param list - Session list snapshot.
++		* @param rowState - pin/archive registry plus the archived filter.
++		* @param statuses - unified UI status by Session.
++		* @param groupsState - persisted groups, order and assignments.
++		* @returns the ordered sections plus the stray (ungrouped) members.
++		*/
++		function deriveCustomSections(list, rowState, statuses, groupsState) {
++			const archived = new Set(rowState.archivedSessionIds);
++			const pinned = new Set(rowState.pinnedSessionIds);
++			const current = mainSessionId(list);
++			const knownIds = new Set(groupsState.groups.map((group) => group.id));
++			const buckets = new Map([...knownIds].map((id) => [id, []]));
++			buckets.set("", []);
++			for (const id of list.ids) {
++				const session = list.byId[id];
++				if (session === void 0) continue;
++				if (!sessionVisible(session, current, archived, rowState.archivedFilter)) continue;
++				const assigned = groupsState.assignments[session.id];
++				buckets.get(assigned !== void 0 && knownIds.has(assigned) ? assigned : "").push(session);
++			}
++			const order = [...groupsState.groupOrder.filter((id) => knownIds.has(id)), ...[...knownIds].filter((id) => !groupsState.groupOrder.includes(id))];
++			const byId = new Map(groupsState.groups.map((group) => [group.id, group]));
++			return {
++				sections: order.map((id) => {
++					const group = byId.get(id);
++					const members = buckets.get(id);
++					const expanded = groupsState.collapsed[id] !== true;
++					return {
++						key: id,
++						label: group.name,
++						groupId: id,
++						expanded,
++						sessionCount: members.length,
++						sessions: expanded ? sectionMembers(members, pinned, archived).map((session) => sessionNode(session, list, statuses, pinned, archived)) : []
++					};
++				}),
++				stray: buckets.get("")
++			};
++		}
++		/** The custom-groups body: assignments decide the single home of every visible Session. */
++		function CustomGroupsList({ list, rowState, onLeaveArchivedOnly, useSessionStatus, open, onSessionRenameRequest, renderSlot, revealSessionId, onSessionRevealed, usePanelInfo, workspaceReady, animationResetKey, t }) {
++			const panelActive = usePanelInfo((info) => info.activePanelId !== null);
++			const statuses = useSessionStatus((s) => s);
++			const groupsState = (0, react.useSyncExternalStore)(sessionGroupsHandle.subscribe, sessionGroupsHandle.getSnapshot, sessionGroupsHandle.getSnapshot);
++			const sections = (0, react.useMemo)(() => {
++				const derived = deriveCustomSections(list, rowState, statuses, groupsState);
++				const archived = new Set(rowState.archivedSessionIds);
++				const pinned = new Set(rowState.pinnedSessionIds);
++				if (derived.stray.length > 0 || derived.sections.length === 0) derived.sections.push({
++					key: "",
++					label: "",
++					groupId: void 0,
++					expanded: true,
++					sessionCount: derived.stray.length,
++					sessions: sectionMembers(derived.stray, pinned, archived).map((session) => sessionNode(session, list, statuses, pinned, archived))
++				});
++				return derived.sections;
++			}, [
++				list,
++				rowState,
++				statuses,
++				groupsState
++			]);
++			const currentId = panelActive ? void 0 : Object.values(list.byId).find((session) => (session.retainedBy.mainView ?? 0) > 0)?.id;
++			const now = Date.now();
++			const rowKeys = [];
++			const children = [];
++			if (sections.length === 0) {
++				rowKeys.push("empty");
++				children.push((0, react_jsx_runtime.jsx)(EmptySessions, {
++					rowState,
++					onLeaveArchivedOnly,
++					t
++				}, "empty"));
++			}
++			for (const section of sections) {
++				const rowKey = "workspace:" + (section.key === "" ? "__ungrouped__" : section.key);
++				rowKeys.push(rowKey);
++				const rows = [];
++				for (const node of section.sessions) {
++					rowKeys.push("session:" + node.id);
++					rows.push((0, react_jsx_runtime.jsx)(SessionNodeItem, {
++						node,
++						currentId,
++						now,
++						onOpen: open,
++						onRenameRequest: onSessionRenameRequest,
++						renderSlot,
++						onReveal: node.id === revealSessionId ? () => {
++							onSessionRevealed(node.id);
++						} : void 0,
++						t
++					}, node.id));
++				}
++				children.push((0, react_jsx_runtime.jsxs)("div", {
++					className: WorkspaceBrowser_module_css_default.groupSection,
++					style: { "--dsh-workspace-indent": "0px" },
++					children: [(0, react_jsx_runtime.jsx)(ProjectRowItem, {
++						group: {
++							key: section.key === "" ? "__ungrouped__" : section.key,
++							workspaceId: section.groupId,
++							cwd: void 0,
++							createdAt: void 0,
++							label: section.label,
++							sessions: [],
++							expanded: section.expanded,
++							sessionCount: section.sessionCount,
++							containsCurrent: false
++						},
++						containsCurrentDescendant: false,
++						newShortcut: void 0,
++						home: void 0,
++						t,
++						onCreate: () => {},
++						onToggle: section.groupId === void 0 ? void 0 : () => {
++							sessionGroupsHandle.actions.toggleGroup(section.groupId);
++						}
++					}, rowKey + ":header"), rows.length > 0 && (0, react_jsx_runtime.jsx)("div", {
++						role: "group",
++						children: rows
++					}, rowKey + ":rows")]
++				}, rowKey));
++			}
++			rowKeys.push("custom:new-group");
++			children.push((0, react_jsx_runtime.jsx)("button", {
++				type: "button",
++				className: WorkspaceBrowser_module_css_default.sessionOverflowButton,
++				"data-row-key": "custom:new-group",
++				onClick: () => {
++					const next = sessionGroupsHandle.getSnapshot().groups.length + 1;
++					sessionGroupsHandle.actions.createGroup(t("custom.defaultName", { n: next }));
++				},
++				children: t("custom.newGroup")
++			}, "custom:new-group"));
++			return (0, react_jsx_runtime.jsxs)(_deepseek_ai_dsh_client_ui_primitives.HoverCardGroup, {
++				className: clsx(WorkspaceBrowser_module_css_default.treeBody, WorkspaceBrowser_module_css_default.wide),
++				children: [(0, react_jsx_runtime.jsxs)(AnimatedRows, {
++					className: clsx(WorkspaceBrowser_module_css_default.list, WorkspaceBrowser_module_css_default.flatList),
++					label: t("section.sessions"),
++					rowKeys,
++					ready: list.phase === "ready" && workspaceReady,
++					resetKey: animationResetKey,
++					children
++				}), (0, react_jsx_runtime.jsx)("span", { className: WorkspaceBrowser_module_css_default.fade })]
++			});
++		}
++		//#endregion
+ 		/** The flat "In one list" body: every session is one draggable top-level row. */
+ 		function FlatList({ list, sessionIds, rowState, onLeaveArchivedOnly, useSessionStatus, open, onSessionRenameRequest, usePanelInfo, setSessionOrder, workspaceReady, animationResetKey, revealSessionId, onSessionRevealed, renderSlot, t }) {
+ 			const panelActive = usePanelInfo((info) => info.activePanelId !== null);
+@@ -3975,6 +4261,20 @@
+ 							remote: remoteSearch,
+ 							resultLimit: searchResultLimit,
+ 							t
++						}) : groupBy === "custom" ? (0, react_jsx_runtime.jsx)(CustomGroupsList, {
++							usePanelInfo,
++							list,
++							rowState,
++							onLeaveArchivedOnly: leaveArchivedOnly,
++							workspaceReady,
++							animationResetKey: groupBy + "/" + orderBy + "/" + archivedFilter,
++							useSessionStatus,
++							open: guardedOpen,
++							onSessionRenameRequest: requestSessionRename,
++							renderSlot,
++							revealSessionId,
++							onSessionRevealed: acknowledgeSessionReveal,
++							t
+ 						}) : groupBy === "flat" ? (0, react_jsx_runtime.jsx)(FlatList, {
+ 							usePanelInfo,
+ 							list,
+@@ -4765,6 +5065,9 @@
+ 			"groupBy.workspace": "按工作区",
+ 			"groupBy.workspaceTree": "按工作区树",
+ 			"groupBy.flat": "单列表",
++			"groupBy.custom": "自定义分组",
++			"custom.newGroup": "新建分组",
++			"custom.defaultName": "分组 {n}",
+ 			"orderBy.label": "排序方式",
+ 			"orderBy.manual": "手动排序",
+ 			"orderBy.updated": "最近更新",
+@@ -4887,6 +5190,9 @@
+ 			"groupBy.workspace": "WorkSpace",
+ 			"groupBy.workspaceTree": "Workspace Tree",
+ 			"groupBy.flat": "In one list",
++			"groupBy.custom": "Custom groups",
++			"custom.newGroup": "New group",
++			"custom.defaultName": "Group {n}",
+ 			"orderBy.label": "Order by",
+ 			"orderBy.manual": "Manual",
+ 			"orderBy.updated": "Last updated",
