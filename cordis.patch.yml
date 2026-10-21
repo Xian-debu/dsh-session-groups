@@ -1,0 +1,12 @@
+# dsh-session-groups bundle patch
+#
+# 1) 禁用核心会话浏览器行（bundle @deepseek-ai/dsh-web-app 挂载的 ui-workspace）。
+#    本包是它的 fork：同一份 client 代码 + 自定义分组补丁，注册同一批 slot hole。
+# 2) 挂载本包。
+#
+# 回滚：删除本包（dsh plugin --profile web remove dsh-session-groups）即恢复原生三选项。
+- id: ui-workspace
+  disabled: true
+- insert:
+    - id: session-groups
+      name: 'dsh-session-groups'

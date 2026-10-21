@@ -1,0 +1,23 @@
+{
+  "package": "@deepseek-ai/dsh-client-ui-workspace",
+  "version": "0.2.1-rc.2",
+  "source": "/root/.nvm/versions/node/v22.21.1/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-client-ui-workspace/lib/client.js",
+  "bytes": 232668,
+  "sha256": "52765aacb6c7f96327da5d8709d8cbb30dd2957d4744a42da04c18e07fe264e5",
+  "inject": [
+    "@deepseek-ai/dsh-api-remote-access",
+    "@deepseek-ai/dsh-api-remotes",
+    "@deepseek-ai/dsh-api-session-controller",
+    "@deepseek-ai/dsh-api-workspace-controller",
+    "@deepseek-ai/dsh-client-connection",
+    "@deepseek-ai/dsh-client-locale",
+    "@deepseek-ai/dsh-client-shortcuts",
+    "@deepseek-ai/dsh-client-ui-conversation",
+    "@deepseek-ai/dsh-client-ui-layout",
+    "@deepseek-ai/dsh-client-ui-renderer",
+    "@deepseek-ai/dsh-client-ui-session",
+    "@deepseek-ai/dsh-client-ui-sidebar"
+  ],
+  "vendoredAt": "2026-10-21T11:34:08.299Z",
+  "history": []
+}

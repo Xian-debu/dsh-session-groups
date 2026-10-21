@@ -1,0 +1,11 @@
+# NOTICE
+
+本包的 `lib/client.js`（以及 `vendor/client.pristine.js`）是
+`@deepseek-ai/dsh-client-ui-workspace` 的衍生作品（fork）：
+
+- 上游：DeepSeek Harness（https://github.com/deepseek-ai/deepseek-harness），
+  目录 `packages/client/ui-workspace`
+- 版本：见 `vendor/upstream.json`
+- 许可：MIT（与上游一致），保留上游版权与许可声明
+
+本仓库的修改以 `patches/*.patch` 形式记录，可机械重打。
