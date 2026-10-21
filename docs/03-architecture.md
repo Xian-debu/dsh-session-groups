@@ -59,7 +59,8 @@ ctx.workspaces（快照：workspaceId / sessionIds / cwd / createdAt / 父子关
 | 未分组排序键 | 1256 | `FLAT_SESSION_ORDER_KEY="__flat_session_order__"` |
 | 视图弹层 | 2877-2960 | `ViewOptionsMenu`：三组硬编码项 + 排序/筛选 + 底部 IconSlidersTwo 图标（2981） |
 | 模式读取 | 3527 | `const groupBy = useStore((s)=>s.groupBy)` |
-| 渲染分派 | 3965-4018 | SearchResults / FlatList / SessionTree 三路；`animationResetKey`=`${groupBy}/${orderBy}/${archivedFilter}` |
+| 渲染分派 | 3965-4015 | SearchResults → FlatList(`groupBy==="flat"`, 3978) → SessionTree(3994)；`animationResetKey`=`${groupBy}/${orderBy}/${archivedFilter}` |
+| 组件定义 | 3024 / 3355 / 3441 | `SessionTree` / `FlatList` / `SearchResults`（三个组件都接收 `renderSlot`，自定义列表可复用 hole 渲染） |
 | 拖拽排序 | 2987-2999 | `sessionDragOrder(order, rows, drag, over)`：仅同 pinned 段内插入 |
 | 拖拽提交 | 3107-3119 | `commitSessionDrag`：`accountSessionIds` 只取源账号组 → 无跨组搬移 |
 | 行拖拽属性 | 1967-1977, 2261-2292, 2275 | `data-row-key="workspace:<key>"` / `"session:<id>"`；`draggable = drag!==void 0 && !row.blank && !row.archived` |
