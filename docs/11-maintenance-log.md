@@ -276,3 +276,33 @@ systemctl restart dsh-web
 
 ### 下一步（P5）
 - e2e 冒烟脚本 + 发布/回滚手册（安装、升级、禁用、清库、回滚到上一 patch 集）。
+
+## M11（2026-10-21）· P5 e2e 冒烟 + 发布/回滚手册落地
+
+### 交付物
+- `scripts/e2e.mjs`（297 行，**零依赖**：Node 22 全局 `fetch` / `WebSocket`，不依赖 puppeteer）：自起临时 chrome（`--headless=new --no-sandbox --remote-debugging-port=0 --user-data-dir=<mkdtemp>`，从 stderr 解析 `DevTools listening on ws://…`）→ `PUT /json/new` 建页 → 内置 `CDP` 类（send 20s 超时、收 `consoleAPICalled` / `exceptionThrown`、`key()` 走 `Input.dispatchKeyEvent`）→ 跑 S1–S9 → 还原 `dsh.sessionGroups.v1` / `dsh.workspace.view.v5` 到启动快照 → kill chrome、删临时 profile。
+- `docs/12-release-rollback.md`（189 行）：12.0 事实基线、12.1 发布门禁三件套、12.2 首次安装、12.3 日常升级、12.4 上游升级、12.5 临时禁用、12.6 卸载/快照还原、12.7 版本回滚、12.8 数据清理、12.9 故障排查、12.10 演练记录。
+- `package.json` 增 `"e2e": "node scripts/e2e.mjs"`；README 状态表 P5 ✅、文档索引 +12、快速命令 + e2e；`docs/07-roadmap.md` P5 行改 ✅ 并新增「P5 验收记录」。
+
+### 验收（对 3099 探针实例，未碰生产 3080）
+- `node scripts/e2e.mjs --url 'http://127.0.0.1:3099/?token=…' --screenshots /tmp` → **17/17 passed**，0 console error / 0 exception，全程约 30s。
+- 覆盖：S1 页面就绪；S2 真实 UI 切 Custom groups 且 `groupBy=custom` 落盘；S3 新建分组；S4 菜单 Rename → 原生 setter 输入 → Enter（`groups[0].name` 与标题同步为 `E2E Group`）；S5 行 `⋯` → `Move to group…` → Modal 选组 ⇒ assignment 落盘且行移入；S6 `Remove from custom group` ⇒ assignment 清空；S7 聚焦头 + CDP Enter ⇒ `aria-expanded=false` + `collapsed[gid]=true`，再 Enter 还原；S8 reload 后模式/分组名保留；S9 零报错。
+- 截图：`/tmp/e2e-group.png`。
+
+### 踩坑 / 修复
+1. **`ws://` 的 `URL.origin` 不是 http**：`new URL("ws://127.0.0.1:PORT/devtools/browser/…").origin` 原样返回 `ws://host:port`，`fetch(base + "/json/new")` 报 `TypeError: fetch failed`（cause `unknown scheme`）。修法：`base = "http://" + url.host`。
+2. e2e 必须对**非生产实例**跑：它会建临时分组 `E2E Group`、改名、移动并移出一条会话（结束还原两个 localStorage 键，不碰会话真实数据）。
+3. 两套驱动并存：e2e 自起 `--remote-debugging-port=0` 的临时 chrome，**不需要** `/tmp/restart-chrome.sh`；手工探针仍要每次重启 9223 上的 chrome。
+4. 步骤间用固定 `sleep` 而不是轮询 DOM —— 已知取舍（稳、代码短，代价是慢）。若日后 flaky，再换成 `waitFor(selector)`。
+5. 手册里 `dsh` 统一写绝对路径 `/root/.nvm/versions/node/v22.21.1/bin/dsh`：非登录 shell 的 PATH 里没有它（本次实测 `dsh: command not found`）。
+
+### 手册里两条容易踩错的操作
+- **临时禁用只删 bundles 行**（`dsh.profile.bundles`），保留依赖与软链；删依赖会让 pnpm 解析失败连带 profile 起不来。禁用后本包 `cordis.patch.yml` 不再生效，原生 `ui-workspace` 自动回归。
+- **清分组数据必须先切回 In one list 再删键**：刷新时 React 状态会写回 localStorage，先删键再 reload 会被覆盖（P4b 探针踩过同一条）。
+
+### 遗留
+- 真实「禁用 → 确认原生三选项 → 加回 → 确认 Custom groups」以及 `systemctl restart dsh-web` 未在生产实切（会中断当前 3080 会话），已标注为手册 12.10 的唯一待补手工演练。
+
+### 下一步
+- P0–P5 全部落地并提交。后续维护节奏：上游 DSH 升级走 `vendor → build → verify → e2e`（手册 12.4）；任何新改动继续「改 → 出 patch → build → verify → e2e → 文档 → 提交」。
+

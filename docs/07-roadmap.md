@@ -11,7 +11,7 @@
 | **P4b** ✅ | 会话行「⋯」菜单归组 | `patches/0005-p4b-menu-move.patch`、`MoveSessionToGroupMenuItem` / `RemoveSessionFromGroupMenuItem` / `MoveSessionDialog`、模块级 request store、locale zh/en 各 4 键、`lib/client.js` 261,838 B | 探针 3099 CDP 验收（见下方「P4b 验收记录」）：菜单项按归组状态条件出现、Modal 三选项、assign 落盘、行唯一移动、取消归组、刷新保留，0 console error | `11-p4b-menu-move` |
 | **P4c** ✅ | 分组头 / 菜单键盘可达 + aria / locale 补全 | `patches/0006-p4c-keyboard.patch`（179 行）、`FOCUS_RING_STYLE`、头节点 `tabIndex=0` + `aria-label`/`aria-expanded`、Enter/空格折叠、F2 改名、Shift+F10/ContextMenu 开菜单、菜单内方向键/Home/End/Esc/Tab 导航、菜单锚 `aria-haspopup`/`aria-expanded`、装饰图标 `aria-hidden`、删除确认 Esc + Delete 自动聚焦、Modal 选项 `aria-current` + `autoFocus`、`lib/client.js` 265,401 B | 探针 3099 CDP 验收（见下方「P4c 验收记录」）：32 项全绿、0 console error（焦点环、折叠落盘、F2 改名/Esc、键盘开菜单并聚焦首项、方向键移动、Enter 激活、确认条 Esc/自动聚焦） | `12-p4c-keyboard` |
 | **P4d** ✅ | 每组水印分页 + 折叠头拖拽自动展开 + 组内排序取舍 | `patches/0007-p4d-watermark.patch`（106 行）、`GROUP_WATERMARK_BASE = 5`、`DROP_EXPAND_DELAY_MS = 600`、每组 `groupWatermarks` state + `watermarkRows()` 分页、`sessionOverflowButton`（复用 `sessions.expand` / `sessions.collapse`）、dragOver 定时展开 + dragLeave/drop 清理、`lib/client.js` 267,425 B | 探针 3099 CDP 验收（见下方「P4d 验收记录」）：13 项全绿、0 console error（分页/展开/收起、aria-expanded、无分页组、折叠头自动展开且不改 assignment） | `13-p4d-watermark` |
-| **P5** | e2e + 发布 + 回滚手册 | CDP e2e 脚本、发布步骤、快照回滚演练 | 一次完整安装→使用→回滚演练通过 | `06-release` |
+| **P5** ✅ | e2e 冒烟 + 发布/回滚手册 | `scripts/e2e.mjs`（零依赖、自起临时 chrome、S1–S9、结束还原 localStorage）、`docs/12-release-rollback.md`（安装/升级/禁用/卸载/快照还原/数据清理/故障排查） | 门禁三件套全绿：build 267,425 B、verify PASS (10)、e2e **17/17 passed**（0 console error）；真实卸载演练待 3080 空闲时手做一次（见手册 12.10） | `14-p5-e2e` |
 
 ## 每阶段固定动作
 
@@ -93,6 +93,16 @@
   2. Node 字符串里写页面代码时，`'...\"...'` 会把反斜杠吞掉导致页面语法错误；统一用模板字符串 + 单引号属性选择器（`querySelector('button[data-row-key="overflow:g1"]')`）再 `JSON.stringify` 传参。
   3. 新 profile 只有 6 条会话在 DOM 里，但宿主实际有 87 条：分页断言必须先点宿主自己的 `Show N more sessions` 把列表展开，才能拿到足够多的 session id 做 seeding。
   4. 宿主与插件的 pager 都是 `button.sessionOverflowButton[data-row-key^="overflow:"]`，断言必须精确到 `overflow:g1` / `overflow:g2`。
+
+## P5 验收记录（2026-10-21）
+
+- 交付物：`scripts/e2e.mjs`（297 行，零依赖：Node 22 全局 `fetch`/`WebSocket`，无 puppeteer）；`docs/12-release-rollback.md`（189 行，12 节）；`package.json` 增 `npm run e2e`。
+- e2e 结构：`launchChrome()` 自起 `--headless=new --no-sandbox --remote-debugging-port=0 --user-data-dir=<mkdtemp>` 并从 stderr 解析 `DevTools listening on ws://…`；`newTarget()` 用 `PUT /json/new?about:blank` 建页；内置 `CDP` 类（send 20s 超时、收集 `consoleAPICalled` / `exceptionThrown`、`key()` 走 `Input.dispatchKeyEvent` keyDown+text）；每步之间固定 `sleep`（当前取舍：不轮询 DOM，稳定优先）。
+- 覆盖 S1–S9（共 17 条断言）：S1 页面就绪（会话行 + `View options`）；S2 真实 UI 切 Custom groups 且 `dsh.workspace.view.v5.groupBy==="custom"`；S3 新建分组落盘 + 头渲染；S4 菜单 Rename → 原生 setter 输入 → Enter，`groups[0].name` 与 `span[class*="_title"]` 同步为 `E2E Group`；S5 行 `⋯` → `Move to group…` → `[data-move-option]` 选组 ⇒ assignment 落盘且 `sectionOf` = `E2E Group`；S6 已归组时出现 `Remove from custom group`，点掉 ⇒ assignment 清空；S7 聚焦头 + CDP Enter ⇒ `aria-expanded=false` + `collapsed[gid]=true`，再 Enter 还原；S8 `Page.reload` 后模式与分组名保留；S9 0 console error / exception。
+- 结果：`node scripts/e2e.mjs --url 'http://127.0.0.1:3099/?token=…' --screenshots /tmp` → **17/17 passed**；全程未碰生产 3080；结束把 `dsh.sessionGroups.v1` / `dsh.workspace.view.v5` 还原为启动快照（`window.__e2eSnapshot`），kill chrome、删临时 profile。截图 `/tmp/e2e-group.png`（E2E Group 头带焦点环、侧栏其余分组为空、宿主分页 `Show 83 more sessions` 仍在）。
+- 首跑唯一失败 + 修复：`new URL("ws://127.0.0.1:PORT/devtools/browser/…").origin` 返回 `ws://host:port`（`ws` 是特殊 scheme，origin 不转 http），`fetch(base + "/json/new")` 报 `TypeError: fetch failed`（cause `unknown scheme`）⇒ 显式 `"http://" + url.host`。
+- 手册要点（`docs/12-release-rollback.md`）：12.1 发布门禁三件套；12.2 首次安装（快照 → profile 两处登记 → 软链 → `--dump-config` 两条断言 → 硬刷新）；12.3 日常升级；12.4 上游升级；12.5 临时禁用（只删 bundles 行，数据保留）；12.6 卸载/快照逐字节还原；12.7 版本回滚（`revert` 或 `checkout patches lib` + 重建，禁止手改 `lib/client.js`）；12.8 数据清理（必须先切回 In one list 再删键，否则刷新被状态回写覆盖）；12.9 故障排查 8 条；12.10 演练记录。
+- 未实切项：真实「禁用 → 原生三选项 → 重新启用」与 `systemctl restart dsh-web` 会中断当前 3080 会话，故只做了命令级核对；手册 12.10 已标注为唯一待补的手工演练。
 
 ## 后续阶段的固定待办
 

@@ -17,7 +17,7 @@
 | P4c | 分组头 / 菜单键盘可达 + aria/locale 补全（Tab 聚焦、Enter/空格折叠、F2 改名、Shift+F10 菜单、方向键/Home/End 导航、Esc 取消） | ✅ 完成（2026-10-21，探针 3099 验收 32 项全绿：焦点环、折叠/展开落盘、F2 改名与 Esc 取消、键盘开菜单并聚焦首项、方向键移动、Enter 激活、删除确认 Esc 取消与 Delete 自动聚焦，0 报错） |
 | P4d | 每组水印分页（Show N more / Show less）+ 折叠头拖拽经过自动展开 + 组内排序取舍 | ✅ 完成（2026-10-21，探针 3099 验收 13 项全绿：7 成员组显示 5 行 + 「Show 2 more sessions」、展开 7 行/收起 5 行、aria-expanded 跟随、2 成员组无分页、折叠头 600ms 自动展开且不移动会话，0 报错） |
 | P4 | 与搜索、归档、手动排序、水印、locale、键盘的协同打磨 | ✅ 完成（P4a–P4d 全部落地） |
-| P5 | e2e 验证 + 文档 + 发布/回滚手册 | ⏳ 未开始 |
+| P5 | e2e 冒烟 + 发布/回滚手册 | ✅ 完成（2026-10-21，`scripts/e2e.mjs` 自起临时 chrome 跑 S1–S9 **17/17 passed**、0 console error；`docs/12-release-rollback.md` 覆盖安装/升级/禁用/卸载/快照还原/数据清理/故障排查。真实卸载演练会中断当前 3080 会话，留待空闲时手做一次，见手册 12.10） |
 
 ## 三条关键结论（P0）
 
@@ -39,7 +39,8 @@
 | [docs/08-conventions.md](docs/08-conventions.md) | 工程规范：vendor 升级、构建、安装、回滚、提交 |
 | [docs/09-risks.md](docs/09-risks.md) | 风险与缓解 |
 | [docs/10-finding-duplicate-session-id-menu.md](docs/10-finding-duplicate-session-id-menu.md) | 「复制 Session ID / 复制会话ID」重复项定性 |
-| [docs/11-maintenance-log.md](docs/11-maintenance-log.md) | 维护日志：pnpm 安装链修复（M1）、行菜单去重与改造（M2）、P2–P4d 各阶段落地（M4–M10） |
+| [docs/11-maintenance-log.md](docs/11-maintenance-log.md) | 维护日志：pnpm 安装链修复（M1）、行菜单去重与改造（M2）、P2–P5 各阶段落地（M4–M11） |
+| [docs/12-release-rollback.md](docs/12-release-rollback.md) | **发布与回滚手册**：发布门禁、首次安装、日常/上游升级、临时禁用、卸载与快照还原、版本回滚、数据清理、故障排查、演练记录 |
 
 ## 环境基线
 
@@ -71,4 +72,5 @@ ln -sfn /root/dsh-session-groups /root/.dsh/profiles/web/node_modules/dsh-sessio
 node scripts/vendor.mjs     # 从安装目录重新 vendor 上游 client.js 并校验 sha256
 node scripts/build.mjs      # pristine + patches → lib/client.js + lib/index.js
 node scripts/verify.mjs     # 校验 lib/client.js 与 pristine/patch 一致、id 与注入声明正确
+node scripts/e2e.mjs --url "http://127.0.0.1:3099/?token=…"   # 端到端冒烟（自起临时 chrome；需先起探针实例）
 ```
