@@ -6,7 +6,7 @@
 | **P1** ✅ | vendor 管线 + fork 骨架跑起来（**零功能变化**） | `scripts/vendor.mjs` / `build.mjs` / `verify.mjs`、`vendor/upstream.json`、`lib/client.js`（仅改 id）、`lib/index.js`、`package.json`、`cordis.patch.yml` | 已上线 3080 实测（见下方「P1 验收记录」）：原生渲染一致、三选项菜单仍在、0 console error、`ui-workspace` 已下线 | `03-p1-fork-skeleton` / `04-p1-install-verify` |
 | **P2** ✅ | 数据模型 + 第四种模式 + 只读渲染 | `patches/0001-custom-groups.patch`（locale + 菜单项 + 渲染分支 + store/derive/列表组件，全部落在 `lib/client.js`）、`lib/client.js` 243,751 B | 探针 3099 CDP 验收（见下方「P2 验收记录」）：菜单出现第四项、切模式后 Ungrouped 平铺、点 New group 生成 Group 1 分区、localStorage 落盘、刷新保留、0 console error | `07-p2-custom-groups` |
 | **P3a** ✅ | 分组头管理（新建入口、改名、调序、删除二次确认） | `patches/0002-p3a-group-header.patch`、`CustomGroupHeader`、store `moveGroup`、locale zh/en 各 9 键、`lib/client.js` 252,074 B | 探针 3099 CDP 验收（见下方「P3a 验收记录」）：改名、Move up、删除确认、未分组折叠全通，0 console error | `08-p3a-group-header` |
-| **P3b** | 拖入 / 拖出 | 跨容器拖拽提交（assign/unassign）、分组头 drop 热区 | 验收标准 6.2 的拖拽交互全通 | `09-p3b-drag` |
+| **P3b** ✅ | 拖入 / 拖出 | `patches/0003-p3b-drag.patch`、会话行 `drag` 接线、分组头 drop 热区（`DROP_HINT_STYLE` / `DROP_HOVER_STYLE`）、`assign`/`unassign` 提交、`lib/client.js` 254,388 B | 探针 3099 CDP 验收（见下方「P3b 验收记录」）：拖入分组、拖回未分组、刷新保留、drop 高亮全通，0 console error | `09-p3b-drag` |
 | **P4** | 与既有机制协同打磨 | 搜索/归档/排序/置顶/水印/locale/键盘 | 无 console error；视觉与原生分组头一致 | `05-polish` |
 | **P5** | e2e + 发布 + 回滚手册 | CDP e2e 脚本、发布步骤、快照回滚演练 | 一次完整安装→使用→回滚演练通过 | `06-release` |
 
@@ -33,7 +33,7 @@
 - 管线：`node scripts/build.mjs` → 243,751 B / sha256 `050a5de8d0a5345d1bf8409c2e8f472021a4cccff487b9d91f3550c63e598a9c`；`node scripts/verify.mjs` → **PASS (10 checks)**。
 - 探针实例（`DSH_PROFILE=web dsh web --port 3099 --no-open`）：chunk `/plugins/??dsh-session-groups/client.js&rev=398cd4badd48` → 200 / 243,791 B，含 `CustomGroupsList` ×2、`groupBy.custom` ×3。
 - CDP（1440×900，界面语言 **en**）：View options → Group by 出现 **Custom groups**；点选后侧栏 = `Ungrouped` 单节 + 全部会话平铺 + 尾部 `New group`；点 New group ⇒ `Group 1`（在上）+ `Ungrouped`（在下），`data-row-key` = `["workspace:g1","workspace:__ungrouped__"]`，localStorage `dsh.sessionGroups.v1` = `{"version":1,"groups":[{"id":"g1","name":"Group 1",…}],"assignments":{},"groupOrder":["g1"],"ungroupedOrder":[],"collapsed":{},"updatedAt":…}`；EVENTS 空（0 error / 0 exception）。
-- 已知欠账（P3/P4 处理）：分组头目前复用 `ProjectRowItem`（复用其「未分组」文案与折叠箭头），尚无拖入热区、改名、删除、调序；`New group` 按钮在长列表末尾，需要 P3 在分组头/菜单里补入口（对应 docs/06 Q9）；拖拽（拖入/拖出）整体未接。
+- 已知欠账（P3/P4 处理）：分组头目前复用 `ProjectRowItem`（复用其「未分组」文案与折叠箭头）；`New group` 按钮在长列表末尾，P3a 已在分组头/菜单补入口（对应 docs/06 Q9）；拖入/拖出已在 P3b 接上（跨容器 assign/unassign + 分组头 drop 热区）。
 
 ## P3a 验收记录（2026-10-21）
 
@@ -42,6 +42,13 @@
 - 探针（3099 + CDP 1440×900，界面语言 en）：清 localStorage 后 reload → View options 切 **Custom groups** → 头部 `New group` 建 `g1`、底部按钮建 `g2` → 菜单 rename 为 `Renamed`（localStorage `groups[0].name = "Renamed"`）→ g2 **Move up**（`groupOrder` = `["g2","g1"]`，`data-row-key` 顺序同步）→ g2 **Delete group** 出现行内确认条 `Delete group “Group 2”? Delete / Cancel`，点 Delete 后 `groups` 只剩 `g1` → 点未分组头折叠，`collapsed[""] = true`、会话行 91 → 0。**0 console error / 0 page exception**（reload 后清空日志缓冲再断言）。
 - 期间修掉两个真实缺陷：① locale 漏加 9 个 key ⇒ 空名分组把原始 key `custom.untitled` 显示出来；② store 漏加 `moveGroup` ⇒ 点 Move up 抛 `TypeError: sessionGroupsHandle.actions.moveGroup is not a function` 并连带 React #311。
 - 探针坑：同一个 token URL 二次 `Page.navigate` 不再渲染（token 一次性）⇒ 改为「清 localStorage + `Page.reload`」（httpOnly cookie 保活）；`Runtime.enable` 会重放上一页缓存的 console 消息 ⇒ 必须在 reload 完成后清空 logs 再断言。
+
+## P3b 验收记录（2026-10-21）
+
+- 交付：`patches/0003-p3b-drag.patch`（120 行）。`CustomGroupsList` 新增 `dragSession` 状态 + `useNativeDragAcceptance`，每条 `SessionNodeItem` 接上 `drag`（start/end 只维护 `dragSession`，组内不排序），`CustomGroupHeader` 接 `dragAccept` / `onDropSession` 做后置 drop 目标：拖拽中所有分组头显示 `DROP_HINT_STYLE`（虚线环），悬停头显示 `DROP_HOVER_STYLE`（虚线环 + hover 底色），落点执行 `assign(sessionId, groupId)`（分组头）或 `unassign(sessionId)`（未分组头），同组/未分组重复投放为 no-op。
+- 管线：`node scripts/build.mjs` → `lib/client.js` 254,388 B / sha256 `0c14b706ed20187ad580d64a166ca4494196d8cf403b5474abb76a4c69ac4258`，patches = 0001,0002,0003；`node scripts/verify.mjs` → **PASS (10 checks)**。
+- 探针（3099 + CDP 1440×900，界面语言 en，拖拽用页面内 `new DragEvent(..., { dataTransfer: new DataTransfer() })` 合成）：先清 localStorage + reload → 切 **Custom groups** → 建 `g1`；挑一条 `draggable === true` 的未分组会话行（`blank` 的 New Session 行按设计不可拖，探针里用 `draggable === true` 过滤，候选 90 条）→ `dragstart` 后 dataTransfer 里是 `session-…` id，两个分组头都出现虚线提示环 → `dragover` `workspace:g1` 后该头变强调色环 + hover 底色 → `drop` 后 `assignments[session-…] = "g1"`，行归属从 `workspace:__ungrouped__` 迁到 `workspace:g1`，reload 后仍是 `workspace:g1` → 再从 `g1` 拖到 `workspace:__ungrouped__`，`assignments` 清空、行回到未分组。**0 console error / 0 page exception**。
+- 已知限制（交 P4 决定是否补）：拖拽经过折叠的分组头时不会自动展开；组内拖拽排序未接（组内顺序仍按列表原始顺序）；拖拽期间没有 `dragend` 兜底清理以外的取消动画。
 
 ## 后续阶段的固定待办
 

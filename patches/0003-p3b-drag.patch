@@ -1,0 +1,120 @@
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -3542,6 +3542,21 @@
+ 				stray: buckets.get("")
+ 			};
+ 		}
++		/** Drop-target ring shown on every group header while a Session row is being dragged. */
++		const DROP_HINT_STYLE = {
++			outline: "1px dashed var(--dsw-alias-line-2, rgba(127, 127, 127, 0.35))",
++			outlineOffset: "-1px",
++			borderRadius: "6px"
++		};
++		/** Highlight for the group header the dragged Session is currently over. */
++		const DROP_HOVER_STYLE = {
++			background: "var(--dsw-alias-bg-hover, rgba(127, 127, 127, 0.14))",
++			outline: "1px dashed var(--dsw-alias-state-accent-primary, rgba(64, 128, 255, 0.7))",
++			outlineOffset: "-1px",
++			borderRadius: "6px"
++		};
++		/** Alt: focused drop ring, kept separate so the hint and hover read differently. */
++		const DROP_ACTIVE_STYLE = DROP_HOVER_STYLE;
+ 		/**
+ 		* One custom-group header: collapse, inline rename, move up/down, delete with an inline confirm.
+ 		* A real folder (workspaceId) header would offer workspace actions, so custom groups render
+@@ -3550,10 +3565,14 @@
+ 		* @param props.t - the browser root's locale seat.
+ 		* @returns the header row.
+ 		*/
+-		function CustomGroupHeader({ section, t }) {
++		function CustomGroupHeader({ section, t, dragAccept, onDropSession }) {
+ 			const ungrouped = section.groupId === void 0;
+ 			const rowKey = "workspace:" + (section.key === "" ? "__ungrouped__" : section.key);
+ 			const [menuOpen, setMenuOpen] = react.useState(false);
++			const [dropOver, setDropOver] = react.useState(false);
++			react.useEffect(() => {
++				if (!dragAccept) setDropOver(false);
++			}, [dragAccept]);
+ 			const [editing, setEditing] = react.useState(false);
+ 			const [confirming, setConfirming] = react.useState(false);
+ 			const [draft, setDraft] = react.useState(section.label);
+@@ -3669,12 +3688,27 @@
+ 			}, "menu"));
+ 			return (0, react_jsx_runtime.jsxs)("div", {
+ 				className: clsx(Rows_module_css_default.projectRow, menuOpen && Rows_module_css_default.menuOpen),
++				style: dropOver ? DROP_HOVER_STYLE : dragAccept ? DROP_HINT_STYLE : void 0,
+ 				"data-row-key": rowKey,
+ 				role: "treeitem",
+ 				"aria-expanded": section.expanded,
+ 				onClick: () => {
+ 					sessionGroupsHandle.actions.toggleGroup(ungrouped ? "" : section.groupId);
+ 				},
++				onDragOver: !dragAccept ? void 0 : (e) => {
++					e.preventDefault();
++					e.dataTransfer.dropEffect = "move";
++					setDropOver(true);
++				},
++				onDragLeave: !dragAccept ? void 0 : (e) => {
++					if (e.currentTarget.contains(e.relatedTarget)) return;
++					setDropOver(false);
++				},
++				onDrop: !dragAccept ? void 0 : (e) => {
++					e.preventDefault();
++					setDropOver(false);
++					onDropSession(section.groupId);
++				},
+ 				children: [
+ 					(0, react_jsx_runtime.jsx)("span", {
+ 						className: clsx(Rows_module_css_default.slot, Rows_module_css_default.folder, section.expanded && Rows_module_css_default.folderActive),
+@@ -3728,6 +3762,21 @@
+ 			const panelActive = usePanelInfo((info) => info.activePanelId !== null);
+ 			const statuses = useSessionStatus((s) => s);
+ 			const groupsState = (0, react.useSyncExternalStore)(sessionGroupsHandle.subscribe, sessionGroupsHandle.getSnapshot, sessionGroupsHandle.getSnapshot);
++			const [dragSession, setDragSession] = react.useState(null);
++			useNativeDragAcceptance(dragSession !== null);
++			const dropSessionInto = (groupId) => {
++				const sessionId = dragSession;
++				setDragSession(null);
++				if (sessionId === null || sessionId === void 0) return;
++				const assigned = sessionGroupsHandle.getSnapshot().assignments[sessionId];
++				if (groupId === void 0) {
++					if (assigned === void 0) return;
++					sessionGroupsHandle.actions.unassign(sessionId);
++					return;
++				}
++				if (assigned === groupId) return;
++				sessionGroupsHandle.actions.assign(sessionId, groupId);
++			};
+ 			const sections = (0, react.useMemo)(() => {
+ 				const derived = deriveCustomSections(list, rowState, statuses, groupsState);
+ 				const archived = new Set(rowState.archivedSessionIds);
+@@ -3778,6 +3827,18 @@
+ 						onReveal: node.id === revealSessionId ? () => {
+ 							onSessionRevealed(node.id);
+ 						} : void 0,
++						drag: {
++							start: () => {
++								setDragSession(node.id);
++							},
++							active: dragSession !== null,
++							marker: null,
++							hover: () => {},
++							drop: () => {},
++							end: () => {
++								setDragSession(null);
++							}
++						},
+ 						t
+ 					}, node.id));
+ 				}
+@@ -3786,7 +3847,9 @@
+ 					style: { "--dsh-workspace-indent": "0px" },
+ 					children: [(0, react_jsx_runtime.jsx)(CustomGroupHeader, {
+ 						section,
+-						t
++						t,
++						dragAccept: dragSession !== null,
++						onDropSession: dropSessionInto
+ 					}, rowKey + ":header"), rows.length > 0 && (0, react_jsx_runtime.jsx)("div", {
+ 						role: "group",
+ 						children: rows

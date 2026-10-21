@@ -159,3 +159,29 @@ systemctl restart dsh-web
 ### 下一步（P3b）
 - 跨容器拖放：会话行拖到别的分组头 / 未分组头 = `assign(sessionId, groupId)` / `unassign`，分组头做 drop 热区并复用 `Rows_module_css_default.dropBefore/dropAfter` 高亮；组内仍走既有 `sessionDragOrder`。
 
+## M6（2026-10-21）· P3b 拖入 / 拖出落地
+
+### 交付物
+- `patches/0003-p3b-drag.patch`（120 行），产物 `lib/client.js` 254,388 B / sha256 `0c14b706ed20187ad580d64a166ca4494196d8cf403b5474abb76a4c69ac4258`，`node scripts/verify.mjs` PASS (10)。
+- `CustomGroupsList`：新增 `const [dragSession, setDragSession] = react.useState(null)` + `useNativeDragAcceptance(dragSession !== null)`；`dropSessionInto(groupId)` 统一提交（`groupId === void 0` → `unassign`，否则 `assign`，同组 no-op）。
+- `SessionNodeItem`（custom 模式）：接 `drag: { start, active, marker: null, hover: () => {}, drop: () => {}, end }` —— 只负责把 `dragSession` 置位/清空，组内不排序（沿用列表原始顺序）。
+- `CustomGroupHeader`：新增 props `dragAccept` / `onDropSession`，行 div 上挂 `onDragOver`（`preventDefault` + `dropEffect = "move"` + `setDropOver(true)`）、`onDragLeave`（`contains(relatedTarget)` 时忽略子元素抖动）、`onDrop`（`preventDefault` + `onDropSession(section.groupId)`）；`react.useEffect` 在 `dragAccept` 转 false 时清 `dropOver`。
+- 两个模块级样式：`DROP_HINT_STYLE`（拖拽中所有头：`1px dashed var(--dsw-alias-line-2, …)`）、`DROP_HOVER_STYLE`（悬停头：`--dsw-alias-state-accent-primary` 虚线 + `--dsw-alias-bg-hover` 底色）。
+
+### 验收（探针 3099 + CDP，未碰生产 3080）
+合成拖拽（页面内 `new DragEvent(…, { dataTransfer: new DataTransfer() })`，React 的 drag 合成事件照常触发）：
+- 候选 90 条 `draggable === true` 的未分组行（`blank` 的 New Session 行按设计不可拖，探针按 `draggable` 过滤后取第一条 `session-a2b10ae6-…`）。
+- `dragstart` ⇒ dataTransfer `text/plain` = session id；`workspace:g1` 与 `workspace:__ungrouped__` 两个头都出现虚线提示环。
+- `dragover` `workspace:g1` ⇒ 该头 `style.outline` 变 `1px dashed var(--dsw-alias-state-accent-primary, rgba(64,128,255,0.7))`、`style.background` 变 hover 色。
+- `drop` ⇒ localStorage `assignments[session-…] = "g1"`，行归属 `workspace:__ungrouped__` → `workspace:g1`；`Page.reload` 后仍为 `workspace:g1`。
+- 再从 `g1` 拖到 `workspace:__ungrouped__` ⇒ `assignments` 里该键被删、行回到未分组。
+- 全程 **0 console error / 0 page exception**；截图 `/tmp/p3b-drag.png`（1440×900，悬停 g1 时的强调环）。
+
+### 已知限制（交 P4 决定是否补）
+- 拖拽经过折叠的分组头不会自动展开（投放仍生效，计数更新，但看不见成员）。
+- 组内拖拽排序未接：custom 模式行顺序 = 列表原始顺序，不写 `ungroupedOrder`。
+- 拖拽期间除 `dragend` 外没有全局兜底清理（合成/异常拖拽场景下若收不到 dragend，需下一次拖拽覆盖）。
+
+### 下一步
+- P4：搜索 / 归档 / 手动排序 / 置顶 / 水印 / locale / 键盘的协同打磨，以及上面三条限制的取舍。
+
