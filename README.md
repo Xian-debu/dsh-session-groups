@@ -8,7 +8,7 @@
 | 阶段 | 内容 | 状态 |
 | --- | --- | --- |
 | P0 | 探测 DSH 会话页构建逻辑 / 扩展点 / 可行性 | ✅ 完成（2026-10-21） |
-| P1 | vendor 管线 + fork 骨架安装冒烟 | ⏳ 未开始，待设计对齐 |
+| P1 | vendor 管线 + fork 骨架安装冒烟 | ✅ 完成（2026-10-21，零功能变化已上线） |
 | P2 | 自定义分组数据模型 + 第四种分组模式 + 渲染 | ⏳ 未开始 |
 | P3 | 拖入 / 拖出 / 分组管理菜单 | ⏳ 未开始 |
 | P4 | 与搜索、归档、手动排序、置顶、水印的协同打磨 | ⏳ 未开始 |
@@ -41,6 +41,23 @@
 - 核心客户端包位置：`/root/.nvm/versions/node/v22.21.1/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/`（305 个包）
 - 被 fork 目标：`@deepseek-ai/dsh-client-ui-workspace@0.2.1-rc.2`（`lib/client.js` 232,668 B / 5,354 行，非压缩、保留注释）
 - 本机插件开发仓库：`/root/dsh-plugins/`（独立 git 仓库，工作区当前有其它未提交改动，**本仓库提交不要混入**）
+
+## 本机安装方式（P1 落地）
+
+pnpm 侧存在**预先存在**的解析故障：profile 依赖 `dsh-preset-workbench@^0.1.3` 在 npmmirror 上已无法解析（只剩 1.0.2），
+导致任何 `dsh plugin add` 都会 `ERR_PNPM_NO_MATCHING_VERSION` 失败。因此本仓按 profile 里 `dsh-ops` 同款方式**手工 link 安装**：
+
+```bash
+# 1) profile 依赖登记（已做）
+#    /root/.dsh/profiles/web/package.json:
+#      dependencies["dsh-session-groups"] = "link:/root/dsh-session-groups"
+#      dsh.profile.bundles += "dsh-session-groups"
+# 2) 软链（已做）
+ln -sfn /root/dsh-session-groups /root/.dsh/profiles/web/node_modules/dsh-session-groups
+```
+
+好处：源码目录即生效目录（无硬链接农场、无需 `cp -f`），改完刷新页面即可。
+回滚：删 bundles 里那一行 + 删软链 + 恢复快照 `20261021-193308-pre-session-groups`。
 
 ## 快速命令（P1 之后生效）
 
