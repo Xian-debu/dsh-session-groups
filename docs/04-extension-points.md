@@ -18,7 +18,7 @@
 
 - 拖拽：`sessionDragOrder` 2987、`commitSessionDrag` 3107、`workspaceGroupHalf` 3001、行 `onDragStart/onDragOver/onDragEnd` 2285-2292、`withinGroup` 3102。
 - 行渲染：`sessionNode` 1059、水印行 `watermarkRows` / `SESSION_WATERMARK_BASE`、`FlatList` 3354-3372 的行级拖拽。
-- 行右键菜单：`sidebar.workspaces.session.menu.item` 渲染处 2344，第三方示例 `dsh-session-id-copy/src/client/index.jsx:100`（`MenuItemButton` + order 500）。
+- 行级操作菜单（文档旧称「右键菜单」）：渲染处 2344。**实测宿主没有真正的 `contextmenu` 监听**——`Menu` 由行内 `⋯`（`IconEllipsisOutlineRegular`，`aria-label` = `t("actions.session.aria", { name })`）按钮触发，`renderSlot("sidebar.workspaces.session.menu.item", { sessionId, displayTitle }, { hookContext: menuOpenState })`；第三方示例 `dsh-session-id-copy/src/client/index.jsx:100`（`MenuItemButton` + order 500）。
 - locale：`ctx.locale.register("workspace", {zh, en})`，键集以 zh 为准。
 
 ## 4.3 patch 层能力（`cordis.patch.yml`）

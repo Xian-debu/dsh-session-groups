@@ -206,3 +206,28 @@ systemctl restart dsh-web
 
 ### 下一步（P4b）
 - 右键菜单项：`移动到分组 ▸`（列出真实分组 + 新建分组…）/ `移出自定义分组`；置顶会话也可经此归组（置顶优先级仍最高，取消置顶后即落到所选分组）。
+
+
+## M8（2026-10-21）· P4b 会话行菜单归组落地
+
+### 交付物
+- `patches/0005-p4b-menu-move.patch`（194 行），产物 `lib/client.js` 261,838 B / sha256 `b35a75e4b415756cb8427301d31f87a4416720719ac724c80ce4c9891fd9ff3d`，patches = 0001..0005，`node scripts/verify.mjs` PASS (10)；pristine+patches 重建结果与手改文件逐字节一致。
+- 菜单项：`MoveSessionToGroupMenuItem`（无分组时 `return null`）→ 关闭菜单后 `moveSessionRequestHandle.actions.open(sessionId)`；`RemoveSessionFromGroupMenuItem`（未归组时 `return null`）→ `sessionGroupsHandle.actions.unassign(sessionId)`；order 350 / 360，排在 `session-id`(450) 之前。
+- 选择器 UI：宿主 `primitives` 无子菜单，故用 `Modal` 承担 —— `MoveSessionDialog` 注册在 `shell.overlay`，列出「各真实分组 + 未分组（移出）」，选项 `button[data-move-option]`（真实分组 = groupId，移出 = `__none__`），当前归属高亮 + 勾号；选择即 `assign`/`unassign` 并关闭。状态经模块级 `createMoveSessionRequestStore()`（`useSyncExternalStore`）在菜单与 dialog 之间传递，避免 props 跨层。
+- locale：zh `移动到分组…` / `移出自定义分组` / `移动到分组` / `未分组（移出）`；en `Move to group…` / `Remove from custom group` / `Move to group` / `No group (remove)`。
+
+### 验收（探针 3099 + CDP，未碰生产 3080）
+- 预置两个分组 → `View options → Custom groups`：`⋯` 菜单出现 `Move to group…`、未归组时**不出现** `Remove from custom group`；Modal 三选项顺序 `Group 1 / Group 2 / No group (remove)`。
+- 选中 `Group 1`：`assignments[session-…]="g1"` 落盘、Modal 关闭、该行**只出现一次**且移到 `Group 1` 节下；重开菜单出现 `Remove from custom group`，点掉 ⇒ assignment 清空、行离开分组；再归组 `Group 2` 后 `Page.reload` ⇒ 模式 / assignment / 行位置全部保留。**0 console error / 0 page exception**。
+- 截图：`/tmp/p4b-dialog.png`（Modal 打开、当前归属打勾）、`/tmp/p4b-menu.png`（归组后侧栏：Pinned / Group 1 空 / Group 2 含该会话 / 未分组）。
+
+### 探针踩坑（新增，重要）
+- **`scripts/build.mjs` 会用 pristine + patches 重写 `lib/client.js`**：patch 必须先生成再 build（手改 → `diff -u` → build → verify 逐字节比对），否则手改被抹平、patch 为 0 行（本次踩过一次）。
+- 宿主**没有真正的 `contextmenu`**：合成 `MouseEvent("contextmenu")` 不会开菜单；行级菜单是 `⋯` 按钮（`aria-label^="Session actions for"`）触发的 `Menu`。文档里的「右键菜单」是历史说法，已在 docs/04、docs/06 更正。
+- `New Session`（blank）行不渲染 ⋯ 按钮，探针要跳过；置顶会话优先级高于归组，探针要选非置顶行，否则归组后行仍显示在 `Pinned`。
+- 分组头标题节点是 `span[class*="_title"]`（不是 button）；assignment 的键是**裸 session id**，`data-row-key` 带 `session:` 前缀，比较前要转换。
+- 先预置 localStorage 再 reload 可能被页面卸载时的状态回写覆盖：只 reload 一次，模式切换走真实 UI 最稳。
+
+### 下一步（P4c / P4d）
+- P4c：分组头与菜单项的键盘可达（Tab/Enter/Esc、`aria-expanded` / `aria-haspopup`），以及 locale 全键覆盖检查。
+- P4d：每组水印分页（成员多时的分页）、折叠头拖拽经过自动展开、组内排序取舍。

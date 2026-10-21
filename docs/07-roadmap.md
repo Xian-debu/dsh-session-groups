@@ -8,7 +8,8 @@
 | **P3a** ✅ | 分组头管理（新建入口、改名、调序、删除二次确认） | `patches/0002-p3a-group-header.patch`、`CustomGroupHeader`、store `moveGroup`、locale zh/en 各 9 键、`lib/client.js` 252,074 B | 探针 3099 CDP 验收（见下方「P3a 验收记录」）：改名、Move up、删除确认、未分组折叠全通，0 console error | `08-p3a-group-header` |
 | **P3b** ✅ | 拖入 / 拖出 | `patches/0003-p3b-drag.patch`、会话行 `drag` 接线、分组头 drop 热区（`DROP_HINT_STYLE` / `DROP_HOVER_STYLE`）、`assign`/`unassign` 提交、`lib/client.js` 254,388 B | 探针 3099 CDP 验收（见下方「P3b 验收记录」）：拖入分组、拖回未分组、刷新保留、drop 高亮全通，0 console error | `09-p3b-drag` |
 | **P4a** ✅ | 置顶会话独立区 | `patches/0004-p4a-pinned.patch`、`PINNED_SECTION_KEY`、`deriveCustomSections` 的 `pinned` 返回、`CustomGroupHeader` 的 `kind` 三态、`lib/client.js` 255,774 B | 探针 3099 CDP 验收（见下方「P4a 验收记录」）：置顶区在顶部独立成节、pin 会话不进分组且只出现一次、可折叠、取消置顶回落原分组、归档筛选不崩，0 console error | `10-p4a-pinned` |
-| **P4b–d** | 协同打磨剩余项 | 右键「移动到分组 / 移出自定义分组」、键盘可达 + locale/aria、每组水印分页 + 折叠头拖拽自动展开 + 组内排序取舍 | 无 console error；视觉与原生分组头一致 | `11-p4b-…` 起 |
+| **P4b** ✅ | 会话行「⋯」菜单归组 | `patches/0005-p4b-menu-move.patch`、`MoveSessionToGroupMenuItem` / `RemoveSessionFromGroupMenuItem` / `MoveSessionDialog`、模块级 request store、locale zh/en 各 4 键、`lib/client.js` 261,838 B | 探针 3099 CDP 验收（见下方「P4b 验收记录」）：菜单项按归组状态条件出现、Modal 三选项、assign 落盘、行唯一移动、取消归组、刷新保留，0 console error | `11-p4b-menu-move` |
+| **P4c–d** | 协同打磨剩余项 | 键盘可达 + locale/aria；每组水印分页 + 折叠头拖拽自动展开 + 组内排序取舍 | 无 console error；视觉与原生分组头一致 | `12-p4c-…` 起 |
 | **P5** | e2e + 发布 + 回滚手册 | CDP e2e 脚本、发布步骤、快照回滚演练 | 一次完整安装→使用→回滚演练通过 | `06-release` |
 
 ## 每阶段固定动作
@@ -57,6 +58,14 @@
 - 管线：`node scripts/build.mjs` → `lib/client.js` 255,774 B / sha256 `98500cc762136e3064429e84c00af4e86e562940249fa3bf05d75712a1d689e4`，patches = 0001,0002,0003,0004；`node scripts/verify.mjs` → **PASS (10 checks)**。
 - 探针（3099 + CDP 1440×900，界面语言 en）：切 **Custom groups** → 点行内 `Pin session` ⇒ `data-row-key` 首行变 `workspace:__pinned__`（文本 `Pinned`），置顶会话落在其下、未分组节仍在；点 `Pinned` 头 ⇒ `expanded="false"`、该会话行消失、`collapsed["__pinned__"] = true` 落盘；再点展开后 `Unpin session` ⇒ 行回到未分组；随后用 localStorage 预置 `assignments[session-…] = "g1"` 再 pin + reload ⇒ 该会话**只出现一次**（在置顶节），`Group 1` 只剩空头 —— 证明置顶优先级高于归组、显示唯一；`Archived only` 筛选下自定义模式正常渲染分组头（置顶区因无归档置顶会话而隐藏），切回 `Hide archived` 恢复。**0 console error / 0 page exception**（reload 后清空日志缓冲再断言）。
 - 探针坑（新增）：① root 下 headless chrome 必须 `--no-sandbox`，否则直接退出；② 复用旧 chrome 实例会 `timeout Page.navigate` / `timeout Runtime.evaluate`，**每个脚本前重启 chrome**（pkill 模式 `cdp-prof-p4`）最稳；③ 会话行的 `Pin session` 按钮在 hover 才渲染，且 hover 后原 row 引用可能失效 ⇒ 直接在页面全局取第一个 `button[aria-label="Pin session"]` 点击，再用 `closest("[data-row-key]")` 回读归属。
+
+## P4b 验收记录（2026-10-21）
+
+- 交付：`patches/0005-p4b-menu-move.patch`（194 行）。要点：模块级 request store（`createMoveSessionRequestStore()`），菜单项只负责 `open(sessionId)`；`MoveSessionToGroupMenuItem` 在没有分组时 `return null`，`RemoveSessionFromGroupMenuItem` 在 `assignments[sessionId] === void 0` 时 `return null`（两项都先 `setMenuOpen(false)` 再动作，避免菜单项点击被 portal 关闭吃掉）；`MoveSessionDialog` 挂在 `shell.overlay`，用宿主 `Modal` 列出「各真实分组 + 未分组（移出）」，选项为 `button[data-move-option]`（真实分组值 = groupId，移出项值 = `__none__`），当前归属打勾；选择后 `assign` / `unassign` 并关闭。菜单项 order = 350 / 360（排在 `session-id` 450 之前）。
+- locale：zh `移动到分组…` / `移出自定义分组` / `移动到分组` / `未分组（移出）`；en `Move to group…` / `Remove from custom group` / `Move to group` / `No group (remove)`。
+- 管线：`node scripts/build.mjs` → `lib/client.js` 261,838 B / sha256 `b35a75e4b415756cb8427301d31f87a4416720719ac724c80ce4c9891fd9ff3d`，patches = 0001..0005；`node scripts/verify.mjs` → **PASS (10 checks)**；重建产物与手改文件逐字节一致。
+- 探针（3099 + CDP 1440×900，界面语言 en）：localStorage 预置两个分组（Group 1 / Group 2）→ 真实 UI 走 `View options → Custom groups` 切到自定义模式（`dsh.workspace.view.v5.groupBy = "custom"`）→ 选一条**非置顶、有 ⋯ 按钮**的会话行 → 点 `⋯`：菜单按序为 `Pin session / Rename / Fork session / Move to group… / Archive session / Copy Session ID / Export session as Markdown`，**未归组时没有** `Remove from custom group`；点 `Move to group…` ⇒ Modal 三选项 `Group 1 / Group 2 / No group (remove)`（当前归属打勾）；点 `Group 1` ⇒ `assignments[session-…] = "g1"` 落盘、Modal 关闭、该行**只出现一次**且位于 `Group 1` 节下；再点 `⋯` ⇒ 出现 `Remove from custom group`，点掉 ⇒ `assignments` 清空、行离开分组节；再归组到 `Group 2` 后 `Page.reload` ⇒ 模式仍为 custom、assignment 仍在、行仍在 `Group 2` 节下。**0 console error / 0 page exception**。截图：`/tmp/p4b-dialog.png`（Modal）、`/tmp/p4b-menu.png`（归组后侧栏）。
+- 探针坑（新增）：① `scripts/build.mjs` 会 **pristine + patches 重写 `lib/client.js`**，所以 patch 必须在 build **之前**生成（顺序：手改 → `diff -u` 出 patch → build → verify 逐字节比对），否则手改内容被抹平、patch 变 0 行（本次已踩过一次）；② 宿主**没有真正的 `contextmenu`**，合成 `MouseEvent("contextmenu")` 不会开菜单，必须点行内 `button[aria-label^="Session actions for"]`；③ `New Session`（blank）行**不渲染** ⋯ 按钮，探针需跳过；④ 置顶会话的显示优先级高于归组，探针必须选非置顶行，否则归组后行仍留在 `Pinned` 节；⑤ 分组头标题是 `span[class*="_title"]`（不是 button），且 assignment 的键是**裸 session id**（无 `session:` 前缀），与 `data-row-key` 的 `session:` 前缀要做转换；⑥ 先 `localStorage` 预置再 reload 会被页面卸载时的状态回写覆盖，稳妥做法是预置后只 reload 一次，模式切换走真实 UI。
 
 ## 后续阶段的固定待办
 
