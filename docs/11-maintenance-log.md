@@ -256,3 +256,23 @@ systemctl restart dsh-web
 
 ### 下一步（P4d）
 - 每组水印分页（成员多时的「加载更多」游标）+ 折叠头拖拽经过自动展开 + 组内排序取舍（`groupOrder` 与会话行 `order` 的优先级需定案）。
+## M10（2026-10-21）· P4d 水印分页 + 折叠头拖拽自动展开落地
+
+### 交付物
+- `patches/0007-p4d-watermark.patch`（106 行，基线 = P4c 提交 `7186c36` 的 `lib/client.js`），产物 `lib/client.js` **267,425 B / sha256 `39dd618c3c43e74588a039a35f567010dfd8af084f1d015681d47c4519b866e0`**，patches = 0001..0007；重建逐字节一致，`node scripts/verify.mjs` PASS (10 checks)。
+- 水印分页：`GROUP_WATERMARK_BASE = 5`；`CustomGroupsList` 新增 `groupWatermarks` state + `watermarkRows()` 取可见行；组尾 `sessionOverflowButton`（`data-row-key="overflow:<groupKey>"`、`aria-expanded`）复用宿主 locale `sessions.expand({n})` / `sessions.collapse`；点一次 `Infinity`（显示全部），再点删 key 收起；每次增量 5 行。
+- 折叠头拖拽自动展开：`DROP_EXPAND_DELAY_MS = 600`；`dropExpandTimer` ref + `onDragOver` 定时 `toggleGroup`，`onDragLeave`/`onDrop`/卸载清理；只展开、不改 assignment。
+- 决策：组内排序沿用宿主顺序（最近更新 / 手动排序开关），不提供自定义组内排序（`groupOrder` 仅管分组顺序），已写入 `docs/06-design-draft.md` §6.5。
+
+### 验收（探针 3099 + CDP，未碰生产 3080）
+- `/tmp/p4dprobe3.mjs` + `/tmp/p4c-helper.js`：**13/13 PASS、0 console error / 0 exception**。覆盖：7 成员组 5 行 + `Show 2 more sessions`/`aria-expanded=false`、2 成员组无 pager、点开 7 行 + `Show less`/`aria-expanded=true`、再点回 5 行、折叠 Group 2 后拖拽经过 300ms 仍折叠 / 900ms 自动展开、`assignments` 未变（g1=7 / g2=2）。
+- 截图：`/tmp/p4d-watermark.png`（展开态）、`/tmp/p4d-autoexpand.png`（折叠头被拖拽展开）。
+
+### 探针踩坑（新增）
+1. `Runtime.evaluate(returnByValue: true)` 已返回对象，不要再 `JSON.parse`（会报 `"[object Object]" is not valid JSON`）。
+2. Node 侧构页面代码时用模板字符串 + 单引号属性选择器再 `JSON.stringify` 传参，避免 `'\"'` 被吞反斜杠导致页面 SyntaxError。
+3. 新 profile DOM 只有 6 条会话（宿主实际 87 条）：先点宿主 `Show N more sessions` 展开列表才能拿到足够 session id 做 seeding。
+4. 宿主与插件的分页按钮同为 `button.sessionOverflowButton[data-row-key^="overflow:"]`，断言需精确到 `overflow:g1` / `overflow:g2`。
+
+### 下一步（P5）
+- e2e 冒烟脚本 + 发布/回滚手册（安装、升级、禁用、清库、回滚到上一 patch 集）。

@@ -15,7 +15,8 @@
 | P4a | 置顶会话独立「置顶」区（不参与归组、可折叠、不可拖、pin 唯一性优先） | ✅ 完成（2026-10-21，探针 3099 验收：置顶/折叠/取消置顶/与分组互斥/归档筛选全通，0 报错） |
 | P4b | 会话行「⋯」菜单归组（移动到分组… / 移出自定义分组，Modal 选组） | ✅ 完成（2026-10-21，探针 3099 验收：菜单项按归组状态条件出现、Modal 三选项、assign 落盘、行唯一移动、取消归组、刷新保留，0 报错） |
 | P4c | 分组头 / 菜单键盘可达 + aria/locale 补全（Tab 聚焦、Enter/空格折叠、F2 改名、Shift+F10 菜单、方向键/Home/End 导航、Esc 取消） | ✅ 完成（2026-10-21，探针 3099 验收 32 项全绿：焦点环、折叠/展开落盘、F2 改名与 Esc 取消、键盘开菜单并聚焦首项、方向键移动、Enter 激活、删除确认 Esc 取消与 Delete 自动聚焦，0 报错） |
-| P4 | 与搜索、归档、手动排序、水印、locale、键盘的协同打磨 | ⏳ 进行中（P4a、P4b、P4c 已毕，余 P4d 水印分页） |
+| P4d | 每组水印分页（Show N more / Show less）+ 折叠头拖拽经过自动展开 + 组内排序取舍 | ✅ 完成（2026-10-21，探针 3099 验收 13 项全绿：7 成员组显示 5 行 + 「Show 2 more sessions」、展开 7 行/收起 5 行、aria-expanded 跟随、2 成员组无分页、折叠头 600ms 自动展开且不移动会话，0 报错） |
+| P4 | 与搜索、归档、手动排序、水印、locale、键盘的协同打磨 | ✅ 完成（P4a–P4d 全部落地） |
 | P5 | e2e 验证 + 文档 + 发布/回滚手册 | ⏳ 未开始 |
 
 ## 三条关键结论（P0）
@@ -38,7 +39,7 @@
 | [docs/08-conventions.md](docs/08-conventions.md) | 工程规范：vendor 升级、构建、安装、回滚、提交 |
 | [docs/09-risks.md](docs/09-risks.md) | 风险与缓解 |
 | [docs/10-finding-duplicate-session-id-menu.md](docs/10-finding-duplicate-session-id-menu.md) | 「复制 Session ID / 复制会话ID」重复项定性 |
-| [docs/11-maintenance-log.md](docs/11-maintenance-log.md) | 维护日志：pnpm 安装链修复（M1）、行菜单去重与改造（M2）、P2–P4b 各阶段落地（M4–M8） |
+| [docs/11-maintenance-log.md](docs/11-maintenance-log.md) | 维护日志：pnpm 安装链修复（M1）、行菜单去重与改造（M2）、P2–P4d 各阶段落地（M4–M10） |
 
 ## 环境基线
 

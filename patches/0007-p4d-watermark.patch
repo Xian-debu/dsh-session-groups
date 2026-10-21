@@ -1,0 +1,106 @@
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -3706,6 +3706,10 @@
+ 			outlineOffset: "-2px",
+ 			borderRadius: "6px"
+ 		};
++		/** Page size per custom section; matches the host's session watermark step. */
++		const GROUP_WATERMARK_BASE = 5;
++		/** Hover time before a collapsed header opens itself for a dragged Session. */
++		const DROP_EXPAND_DELAY_MS = 600;
+ 		/**
+ 		* One custom-group header: collapse, inline rename, move up/down, delete with an inline confirm.
+ 		* A real folder (workspaceId) header would offer workspace actions, so custom groups render
+@@ -3732,6 +3736,13 @@
+ 			const label = section.label === "" ? t("custom.untitled") : section.label;
+ 			const menuButtonRef = react.useRef(null);
+ 			const menuOpenedByKeyboard = react.useRef(false);
++			const dropExpandTimer = react.useRef(null);
++			const clearDropExpand = () => {
++				if (dropExpandTimer.current === null) return;
++				clearTimeout(dropExpandTimer.current);
++				dropExpandTimer.current = null;
++			};
++			react.useEffect(() => clearDropExpand, []);
+ 			react.useEffect(() => {
+ 				if (!menuOpen || !menuOpenedByKeyboard.current) return;
+ 				menuOpenedByKeyboard.current = false;
+@@ -3942,13 +3953,20 @@
+ 					e.preventDefault();
+ 					e.dataTransfer.dropEffect = "move";
+ 					setDropOver(true);
++					if (section.expanded || dropExpandTimer.current !== null) return;
++					dropExpandTimer.current = setTimeout(() => {
++						dropExpandTimer.current = null;
++						sessionGroupsHandle.actions.toggleGroup(pinnedHeader ? "__pinned__" : ungrouped ? "" : section.groupId);
++					}, DROP_EXPAND_DELAY_MS);
+ 				},
+ 				onDragLeave: !dropEnabled ? void 0 : (e) => {
+ 					if (e.currentTarget.contains(e.relatedTarget)) return;
++					clearDropExpand();
+ 					setDropOver(false);
+ 				},
+ 				onDrop: !dropEnabled ? void 0 : (e) => {
+ 					e.preventDefault();
++					clearDropExpand();
+ 					setDropOver(false);
+ 					onDropSession(section.groupId);
+ 				},
+@@ -4008,6 +4026,7 @@
+ 			const statuses = useSessionStatus((s) => s);
+ 			const groupsState = (0, react.useSyncExternalStore)(sessionGroupsHandle.subscribe, sessionGroupsHandle.getSnapshot, sessionGroupsHandle.getSnapshot);
+ 			const [dragSession, setDragSession] = react.useState(null);
++			const [groupWatermarks, setGroupWatermarks] = react.useState({});
+ 			useNativeDragAcceptance(dragSession !== null);
+ 			const dropSessionInto = (groupId) => {
+ 				const sessionId = dragSession;
+@@ -4080,7 +4099,11 @@
+ 				rowKeys.push(rowKey);
+ 				const rows = [];
+ 				const pinnedSection = section.kind === "pinned";
+-				for (const node of section.sessions) {
++				const watermark = groupWatermarks[section.key] ?? GROUP_WATERMARK_BASE;
++				const visible = watermarkRows(section.sessions, watermark);
++				const paged = section.sessions.length > GROUP_WATERMARK_BASE;
++				const overflowKey = "overflow:" + section.key;
++				for (const node of visible.rows) {
+ 					rowKeys.push("session:" + node.id);
+ 					rows.push((0, react_jsx_runtime.jsx)(SessionNodeItem, {
+ 						node,
+@@ -4107,6 +4130,7 @@
+ 						t
+ 					}, node.id));
+ 				}
++				if (paged) rowKeys.push(overflowKey);
+ 				children.push((0, react_jsx_runtime.jsxs)("div", {
+ 					className: WorkspaceBrowser_module_css_default.groupSection,
+ 					style: { "--dsh-workspace-indent": "0px" },
+@@ -4119,7 +4143,27 @@
+ 					}, rowKey + ":header"), rows.length > 0 && (0, react_jsx_runtime.jsx)("div", {
+ 						role: "group",
+ 						children: rows
+-					}, rowKey + ":rows")]
++					}, rowKey + ":rows"), paged && (0, react_jsx_runtime.jsx)("button", {
++						type: "button",
++						className: WorkspaceBrowser_module_css_default.sessionOverflowButton,
++						"data-row-key": overflowKey,
++						"aria-expanded": watermark === Infinity,
++						onClick: () => {
++							setGroupWatermarks((marks) => {
++								const current = marks[section.key] ?? GROUP_WATERMARK_BASE;
++								if (current === Infinity) {
++									const next = { ...marks };
++									delete next[section.key];
++									return next;
++								}
++								return {
++									...marks,
++									[section.key]: visible.hiddenCount <= GROUP_WATERMARK_BASE ? Infinity : current + GROUP_WATERMARK_BASE
++								};
++							});
++						},
++						children: watermark === Infinity ? t("sessions.collapse") : t("sessions.expand", { n: visible.hiddenCount })
++					}, overflowKey)]
+ 				}, rowKey));
+ 			}
+ 			rowKeys.push("custom:new-group");

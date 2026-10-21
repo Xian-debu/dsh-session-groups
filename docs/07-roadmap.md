@@ -10,7 +10,7 @@
 | **P4a** ✅ | 置顶会话独立区 | `patches/0004-p4a-pinned.patch`、`PINNED_SECTION_KEY`、`deriveCustomSections` 的 `pinned` 返回、`CustomGroupHeader` 的 `kind` 三态、`lib/client.js` 255,774 B | 探针 3099 CDP 验收（见下方「P4a 验收记录」）：置顶区在顶部独立成节、pin 会话不进分组且只出现一次、可折叠、取消置顶回落原分组、归档筛选不崩，0 console error | `10-p4a-pinned` |
 | **P4b** ✅ | 会话行「⋯」菜单归组 | `patches/0005-p4b-menu-move.patch`、`MoveSessionToGroupMenuItem` / `RemoveSessionFromGroupMenuItem` / `MoveSessionDialog`、模块级 request store、locale zh/en 各 4 键、`lib/client.js` 261,838 B | 探针 3099 CDP 验收（见下方「P4b 验收记录」）：菜单项按归组状态条件出现、Modal 三选项、assign 落盘、行唯一移动、取消归组、刷新保留，0 console error | `11-p4b-menu-move` |
 | **P4c** ✅ | 分组头 / 菜单键盘可达 + aria / locale 补全 | `patches/0006-p4c-keyboard.patch`（179 行）、`FOCUS_RING_STYLE`、头节点 `tabIndex=0` + `aria-label`/`aria-expanded`、Enter/空格折叠、F2 改名、Shift+F10/ContextMenu 开菜单、菜单内方向键/Home/End/Esc/Tab 导航、菜单锚 `aria-haspopup`/`aria-expanded`、装饰图标 `aria-hidden`、删除确认 Esc + Delete 自动聚焦、Modal 选项 `aria-current` + `autoFocus`、`lib/client.js` 265,401 B | 探针 3099 CDP 验收（见下方「P4c 验收记录」）：32 项全绿、0 console error（焦点环、折叠落盘、F2 改名/Esc、键盘开菜单并聚焦首项、方向键移动、Enter 激活、确认条 Esc/自动聚焦） | `12-p4c-keyboard` |
-| **P4d** | 每组水印分页 + 折叠头拖拽自动展开 + 组内排序取舍 | 分页游标与「加载更多」、dragOver 定时展开、组内 order 方案取舍文档 | 无 console error；视觉与原生分组头一致 | `13-p4d-…` 起 |
+| **P4d** ✅ | 每组水印分页 + 折叠头拖拽自动展开 + 组内排序取舍 | `patches/0007-p4d-watermark.patch`（106 行）、`GROUP_WATERMARK_BASE = 5`、`DROP_EXPAND_DELAY_MS = 600`、每组 `groupWatermarks` state + `watermarkRows()` 分页、`sessionOverflowButton`（复用 `sessions.expand` / `sessions.collapse`）、dragOver 定时展开 + dragLeave/drop 清理、`lib/client.js` 267,425 B | 探针 3099 CDP 验收（见下方「P4d 验收记录」）：13 项全绿、0 console error（分页/展开/收起、aria-expanded、无分页组、折叠头自动展开且不改 assignment） | `13-p4d-watermark` |
 | **P5** | e2e + 发布 + 回滚手册 | CDP e2e 脚本、发布步骤、快照回滚演练 | 一次完整安装→使用→回滚演练通过 | `06-release` |
 
 ## 每阶段固定动作
@@ -51,7 +51,7 @@
 - 交付：`patches/0003-p3b-drag.patch`（120 行）。`CustomGroupsList` 新增 `dragSession` 状态 + `useNativeDragAcceptance`，每条 `SessionNodeItem` 接上 `drag`（start/end 只维护 `dragSession`，组内不排序），`CustomGroupHeader` 接 `dragAccept` / `onDropSession` 做后置 drop 目标：拖拽中所有分组头显示 `DROP_HINT_STYLE`（虚线环），悬停头显示 `DROP_HOVER_STYLE`（虚线环 + hover 底色），落点执行 `assign(sessionId, groupId)`（分组头）或 `unassign(sessionId)`（未分组头），同组/未分组重复投放为 no-op。
 - 管线：`node scripts/build.mjs` → `lib/client.js` 254,388 B / sha256 `0c14b706ed20187ad580d64a166ca4494196d8cf403b5474abb76a4c69ac4258`，patches = 0001,0002,0003；`node scripts/verify.mjs` → **PASS (10 checks)**。
 - 探针（3099 + CDP 1440×900，界面语言 en，拖拽用页面内 `new DragEvent(..., { dataTransfer: new DataTransfer() })` 合成）：先清 localStorage + reload → 切 **Custom groups** → 建 `g1`；挑一条 `draggable === true` 的未分组会话行（`blank` 的 New Session 行按设计不可拖，探针里用 `draggable === true` 过滤，候选 90 条）→ `dragstart` 后 dataTransfer 里是 `session-…` id，两个分组头都出现虚线提示环 → `dragover` `workspace:g1` 后该头变强调色环 + hover 底色 → `drop` 后 `assignments[session-…] = "g1"`，行归属从 `workspace:__ungrouped__` 迁到 `workspace:g1`，reload 后仍是 `workspace:g1` → 再从 `g1` 拖到 `workspace:__ungrouped__`，`assignments` 清空、行回到未分组。**0 console error / 0 page exception**。
-- 已知限制（交 P4 决定是否补）：拖拽经过折叠的分组头时不会自动展开；组内拖拽排序未接（组内顺序仍按列表原始顺序）；拖拽期间没有 `dragend` 兜底清理以外的取消动画。
+- 已知限制（P4d 已处理前两项）：~~拖拽经过折叠的分组头时不会自动展开~~（P4d：600ms 后自动展开）；组内拖拽排序未接（组内顺序仍按列表原始顺序，P4d 决策见 docs/06 §6.5）；拖拽期间没有 `dragend` 兜底清理以外的取消动画。
 
 ## P4a 验收记录（2026-10-21）
 
@@ -80,6 +80,19 @@
   2. CDP 触发 Enter 激活按钮要用 `Input.dispatchKeyEvent` 的 **`type: "keyDown"` + `text: "\r"`**（`rawKeyDown` 不触发 button 默认动作）。
   3. 菜单打开后焦点**不会**自动进入菜单（activeElement 仍是头节点），必须自己 rAF 聚焦首项；菜单项是 `button[role=menuitem][tabindex=0]`。
   4. 删除确认条只出现在「菜单已关闭」状态：若上一步 Enter 未激活导致菜单仍开着，再点锚按钮会把它关掉 ⇒ 断言前先确保菜单关闭（按 Esc 收尾）。
+
+## P4d 验收记录（2026-10-21）
+
+- 交付物：`patches/0007-p4d-watermark.patch`（106 行，基线 `git show 7186c36:lib/client.js`）；`node scripts/build.mjs` → `lib/client.js` **267,425 B / sha256 `39dd618c3c43e74588a039a35f567010dfd8af084f1d015681d47c4519b866e0`**，patches 0001..0007；pristine+patches 重建与手改逐字节一致；`node scripts/verify.mjs` → PASS (10 checks)。
+- 水印分页：模块常量 `GROUP_WATERMARK_BASE = 5`（与宿主 `SESSION_WATERMARK_BASE` 一致）；`CustomGroupsList` 内 `groupWatermarks: {[sectionKey]: number}` state，每组 `watermark = groupWatermarks[key] ?? 5`，用宿主 `watermarkRows(sessions, watermark)` 取可见行（blank 行始终可见）；仅当 `sessions.length > 5` 时渲染 `button.sessionOverflowButton[data-row-key="overflow:<groupKey>"]`，文案复用宿主 locale `sessions.expand({n: hiddenCount})`（en `Show N more sessions` / zh `显示其余 N 个会话`）与 `sessions.collapse`（en `Show less` / zh `收起`）；点击时若当前为 `Infinity` 则删 key 收起，否则 `hiddenCount <= 5 ? Infinity : current + 5`；`aria-expanded` 跟随。水印仅存在组件 state（与宿主一致，刷新重置）。
+- 折叠头拖拽自动展开：`CustomGroupHeader` 内 `dropExpandTimer` ref；`onDragOver` 时若 `!section.expanded` 且无待触发定时器，则 `setTimeout(toggleGroup(...), DROP_EXPAND_DELAY_MS = 600)`；`onDragLeave`（真正离开）与 `onDrop` 清理定时器，卸载时 `useEffect` 清理。**只展开、不改 assignment**（拖放提交仍由 drop 处理）。
+- 组内排序取舍（决策）：**沿用宿主组内顺序（按「最近更新 / 手动排序」开关），不提供自定义组内排序**。理由：组内 order 与 pin 唯一性、搜索跨组、归档筛选语义互相冲突，且跨组拖拽已覆盖「归组」诉求；`groupOrder` 仅管分组顺序。已写入 `docs/06-design-draft.md` §6.5。
+- 探针（3099 + CDP 1440×900，界面语言 en）：`/tmp/p4dprobe3.mjs`（页面 helper 复用 `/tmp/p4c-helper.js`）。前置：先在默认模式反复点宿主 `Show N more sessions` 17 次展开 87 条会话 → 取 7 条非置顶会话 assign `g1`、2 条 assign `g2` → `Page.reload` → 真实 UI 切 `Custom groups`。断言：Group 1 可见 5 行 + pager 文案 `Show 2 more sessions`/`aria-expanded=false`、Group 2 全部 2 行且无 pager；点 pager ⇒ 7 行 + `Show less`/`aria-expanded=true`；再点 ⇒ 回 5 行；折叠 Group 2（Enter）后从 Group 1 拖行 `dragover` 折叠头 ⇒ 300ms 时仍折叠、900ms 后展开，且 `assignments` 仍为 g1=7 / g2=2；`dragend` 收尾。**13/13 PASS、0 console error / 0 exception**。截图：`/tmp/p4d-watermark.png`（7 行展开态）、`/tmp/p4d-autoexpand.png`（折叠头被拖拽展开）。
+- 探针踩坑（新增）：
+  1. CDC `Runtime.evaluate` 的 `returnByValue` 已把对象反序列化，**不要**再 `JSON.parse` 对象结果（`SyntaxError: "[object Object]" is not valid JSON"`）；返回 JSON 字符串的表达式才需要 parse。
+  2. Node 字符串里写页面代码时，`'...\"...'` 会把反斜杠吞掉导致页面语法错误；统一用模板字符串 + 单引号属性选择器（`querySelector('button[data-row-key="overflow:g1"]')`）再 `JSON.stringify` 传参。
+  3. 新 profile 只有 6 条会话在 DOM 里，但宿主实际有 87 条：分页断言必须先点宿主自己的 `Show N more sessions` 把列表展开，才能拿到足够多的 session id 做 seeding。
+  4. 宿主与插件的 pager 都是 `button.sessionOverflowButton[data-row-key^="overflow:"]`，断言必须精确到 `overflow:g1` / `overflow:g2`。
 
 ## 后续阶段的固定待办
 

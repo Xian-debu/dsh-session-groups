@@ -68,7 +68,7 @@
 | Q1 | 一个会话只能属于一个分组（文件夹），还是可属多个（标签）？ | **唯一归属**，符合「显示唯一性」 |
 | Q2 | 未归组会话怎么显示？ | 底部独立「未分组」区，不按工作区混排 |
 | Q3 | 分组能否拖拽调序 / 置顶？置顶会话放哪？ | 都能；置顶会话在顶部独立区，不参与归组 |
-| Q4 | 组内排序是否沿用「手动排序 / 最近更新」开关？ | 沿用；手动时组内可拖 |
+| Q4 | 组内排序是否沿用「手动排序 / 最近更新」开关？ | 沿用；**不提供自定义组内排序**（P4d 定案）：组内 order 与 pin 唯一性、搜索跨组、归档筛选语义冲突，跨组拖拽已覆盖归组诉求，`groupOrder` 仅管分组顺序 |
 | Q5 | 搜索时是否跨分组？ | 跨分组（分组只影响浏览，不影响搜索） |
 | Q6 | 只存 localStorage，还是落 profile 目录 JSON（跨浏览器）？ | v1 只 localStorage + 导出/导入 JSON |
 | Q7 | 已归档会话可否被归组？ | 可保留成员关系，但只在「仅显示已归档」时可见 |
@@ -84,6 +84,8 @@
 - 分组头展开态用 `aria-expanded`；拖放目标高亮用 `data-drop-target` 属性 + 主题色描边，不写死颜色。
 - 键盘（P4c 已实现）：分组头 `tabIndex=0`，焦点显示 2px accent 焦点环（优先于拖拽提示）；Enter/Space 折叠，F2 行内重命名（Enter 提交 / Esc 取消），Shift+F10 或 ContextMenu 打开 `⋯` 菜单并聚焦首项，菜单内 ArrowUp/ArrowDown/Home/End 循环移动、Esc 关闭并归还焦点、Tab 关闭；删除确认条 Esc 取消、Delete 按钮自动聚焦。
 - 装饰图标（folder / chevron）`aria-hidden`；菜单锚 `aria-haspopup="menu"` + `aria-expanded`；Modal 选项 `aria-current` 标记当前归属。
+- 每组水印分页（P4d）：默认每组显示 5 行（`GROUP_WATERMARK_BASE`，与宿主一致），组尾复用宿主 `sessionOverflowButton` 样式与 `sessions.expand` / `sessions.collapse` 文案；点一次展开全部、再点收起；水印只存组件 state，刷新重置（与宿主行为一致）。
+- 折叠头拖拽自动展开（P4d）：拖拽悬停折叠的分组头 600ms 自动展开，离开/放下时取消；只展开，不改变成员归属。
 - 文案入 locale（`ctx.locale.register("workspace", …)` 扩展键 `groupBy.custom` / `group.custom.new` 等）。
 
 ## 6.6 兼容与回滚
